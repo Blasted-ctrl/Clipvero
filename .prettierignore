@@ -1,6 +1,6 @@
 node_modules
 .next
-data
+/data
 .render
 package-lock.json
 test-results

@@ -176,6 +176,9 @@ Starter $29/month grants 120 credits (12 standard videos); Creator $79 grants 40
 
 ## Current progress
 
+- Public marketing polish: replaced the generic AI-studio hero with an editorial brief composer and original illustrated scene workflow; scoped warm charcoal/ivory styling, simpler navigation, calmer pricing/cards, shorter homepage, updated social image and explicit preview disclosures. Removed glow grids, text shimmer, rotating borders, pointer spotlights and the continuously moving poster strip. Runtime storage remains ignored; static marketing content now stays tracked.
+- Verified the polish against the production build: TypeScript, ESLint and all 41 domain/content tests pass. All 46 browser checks pass, including 43 public-site cases and the existing workspace/security/real-MP4 workflows. Automated WCAG checks pass on home/features/Autopilot/pricing; responsive checks pass at 320/375/768/1024/1440px. Independent code review reports no required findings. No paid AI, billing or publishing verification is implied.
+
 - Repository inspected: initial commit contained only README.md.
 - Verified on October 14, 2026 with Node 24 on Windows: type generation/type checking, lint, production build, and 17 domain/provider/Stripe contract tests pass. A deliberately inverted quota guard was caught by the tests and restored.
 - All three browser acceptance tests pass against the production build: signup/workspace accessibility checks; cross-workspace media/project isolation, invalid uploads and Origin checks; and the complete edit/render/approve/download/reminder workflow. Responsive checks pass at widths 320, 768, 1024 and 1440.

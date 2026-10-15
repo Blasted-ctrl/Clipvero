@@ -1,7 +1,7 @@
 name: Check
 on:
   push:
-    branches: [main]
+    branches: [main, feature/marketing-site]
   pull_request:
 permissions:
   contents: read
