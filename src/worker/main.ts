@@ -8,7 +8,7 @@ import {
 import { tickPipelines } from "../server/pipelines";
 import { run } from "../server/db";
 import { generate } from "./generate";
-import { renderProject, closeRenderer } from "./render";
+import { renderProject, closeRenderer, prepareRenderer } from "./render";
 import { timelineSchema } from "../lib/model";
 
 let stopping = false;
@@ -19,14 +19,18 @@ process.on("SIGTERM", () => {
   stopping = true;
 });
 async function main() {
-  console.log("Clipvero worker ready. Polling the durable queue.");
+  console.log(
+    "Clipvero worker started. Preparing the browser before claiming jobs.",
+  );
   while (!stopping) {
     try {
+      recoverExpiredJobs();
+      await prepareRenderer();
+      if (stopping) break;
       run(
         "INSERT OR REPLACE INTO system_state VALUES ('worker_heartbeat', ?)",
         String(Date.now()),
       );
-      recoverExpiredJobs();
       tickPipelines();
       const job = claimJob();
       if (!job) {
@@ -74,6 +78,7 @@ async function main() {
         );
       } finally {
         clearInterval(timer);
+        await closeRenderer();
       }
     } catch (error) {
       console.error(

@@ -4,7 +4,11 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import {
+  openBrowser,
+  renderMedia,
+  selectComposition,
+} from "@remotion/renderer";
 import { dataDir, one, run, transaction } from "../server/db";
 import { getAsset } from "../server/projects";
 import { recordRenderResult, stage, usage, type JobRow } from "../server/jobs";
@@ -18,9 +22,39 @@ import {
 import type { MediaMap } from "@clipvero/video-engine/composition";
 
 let bundled: Promise<string> | undefined;
+let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
 let server: Server | undefined;
 let serverUrl = "";
 const token = randomBytes(32).toString("hex");
+export async function prepareRenderer() {
+  if (browser) {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        browser.connection.send("Target.setDiscoverTargets", {
+          discover: true,
+        }),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("Render browser did not respond.")),
+            3000,
+          );
+        }),
+      ]);
+      return browser;
+    } catch {
+      await closeRenderer();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  browser ??= await openBrowser("chrome", {
+    browserExecutable:
+      process.env.REMOTION_BROWSER_EXECUTABLE?.trim() || undefined,
+    chromiumOptions: { gl: "angle" },
+  });
+  return browser;
+}
 async function assetServer() {
   if (server) return serverUrl;
   server = createServer(async (req, res) => {
@@ -94,6 +128,7 @@ export async function renderProject(
     publicDir: null,
   });
   const serveUrl = await bundled;
+  const puppeteerInstance = await prepareRenderer();
   const base = await assetServer();
   const ids = new Set(
     timeline.scenes
@@ -108,7 +143,7 @@ export async function renderProject(
   }
   const inputProps = { timeline, media };
   const composition = await selectComposition({
-    browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE,
+    puppeteerInstance,
     serveUrl,
     id: "Clipvero",
     inputProps,
@@ -118,7 +153,7 @@ export async function renderProject(
     output = resolve(dataDir, "assets", filename);
   stage(job.id, "Rendering", 0);
   await renderMedia({
-    browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE,
+    puppeteerInstance,
     composition,
     serveUrl,
     inputProps,
@@ -126,7 +161,6 @@ export async function renderProject(
     outputLocation: output,
     concurrency: 2,
     onProgress: ({ progress }) => stage(job.id, "Rendering", progress),
-    chromiumOptions: { gl: "angle" },
   });
   stage(job.id, "Validating output");
   const metadata = await probe(output),
@@ -163,5 +197,10 @@ export async function renderProject(
   usage(job, "rendering", duration(timeline) / 30, { assetId: id, revision });
 }
 export async function closeRenderer() {
+  const previousBrowser = browser;
+  browser = undefined;
+  await previousBrowser?.close({ silent: true });
   if (server) await new Promise<void>((r) => server!.close(() => r()));
+  server = undefined;
+  serverUrl = "";
 }
