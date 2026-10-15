@@ -139,32 +139,3 @@ jobs:
             /tmp/clipvero-api.log
             /tmp/clipvero-foundation.log
           retention-days: 7
-  consolidate-branches:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [verify, foundation, containers]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Remove the two verified, merged working branches
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          while read -r branch expected; do
-            actual=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq .object.sha)
-            if [ "$actual" != "$expected" ]; then
-              echo "Refusing to delete $branch: its head changed."
-              exit 1
-            fi
-            git merge-base --is-ancestor "$actual" HEAD
-            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
-            echo "Removed merged branch $branch."
-          done <<'BRANCHES'
-          feature/studio-foundation 9aad49ad99be9341cba8c2e00c8d61e8d4715c16
-          feature/marketing-site 2384242cec55faee6df41162f1b23e8e97a00662
-          BRANCHES

@@ -4,7 +4,7 @@
 
 The continuation supersedes the legacy architecture below. Web stays in the repository root during migration, with pnpm workspace packages for the independent video engine and OpenAPI-generated TypeScript contracts. Python uses a uv workspace: services/api (FastAPI) and services/workers (Celery). Do not introduce Redux, synchronous video processing or frontend-owned billing/authorization. Postgres is the production database, Redis the broker/rate-limit store, private S3/R2 the phase-2 media store. Use Python >=3.12, Pydantic 2, SQLAlchemy 2, Alembic, psycopg, HTTPX, Celery and JSON logs. Versions are resolved and committed in uv.lock and pnpm-lock.yaml; never hand-edit locks.
 
-The old SQLite API/worker remains development-only until phases 1 through 3 pass parity. Explicit deployment mode selects one backend. Never silently fail over, share sessions across stores, or claim automatic data migration. Keep legacy data for export/recovery. Removal requires a separate migration, verified PostgreSQL equivalents, and a documented rollback.
+The old SQLite API/worker remains development-only until phases 1 through 3 pass parity. Explicit deployment mode selects one backend. Never silently fail over, share sessions across stores, or claim automatic data migration. Pass backend selection from the server route to shared browser components and use the matching API helper. Never infer the backend from cached HTML attributes. Keep legacy data for export/recovery. Removal requires a separate migration, verified PostgreSQL equivalents, and a documented rollback.
 
 ## Versioned API and ownership
 

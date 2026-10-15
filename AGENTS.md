@@ -107,6 +107,8 @@ External gates: OpenAI and ElevenLabs credentials/billing; private S3/R2 bucket 
 
 ## Continuation progress
 
+- Main consolidation verified: https://github.com/Blasted-ctrl/Clipvero/actions/runs/38687347513 . The polished public site and both development backends share `main`, with their histories preserved. Public sessions and saved script handoff use the configured backend; editor requests remain correct after visiting cached public pages. All three verification jobs and merged-branch cleanup pass, including PostgreSQL/Redis, both browser suites, actual MP4 export and Compose readiness. Both working branches are removed; continue directly on `main`.
+
 - Phase 0: repository and continuation inspected; required architecture and all twelve gates reconciled here and in UI.md/CODING.md.
 - Phase 1 implemented slice: uv/pnpm workspaces, FastAPI /api/v1, Alembic PostgreSQL identity/membership/session/credit/audit schema, server role checks, hashed sessions, transactional one-time trial, aggregate and per-email Redis limits, validated auth/settings UI, persisted light/dark theme, error boundary, generated API types, explicit backend cutover, Celery maintenance queues, separate Dockerfiles/Compose and CI jobs.
 - Verified locally: Python 3.12.13, FastAPI 0.143.1, SQLAlchemy 2.0.54, Pydantic 2.14.1 and Celery 5.6.3 install under uv 0.13.1. PostgreSQL 18 fresh migration, downgrade and re-upgrade succeed in isolated schemas. Thirteen Python tests pass with actual PostgreSQL and an explicit fakeredis test double; the real-Redis broker test is skipped locally. Ruff, format checks and strict mypy pass.
