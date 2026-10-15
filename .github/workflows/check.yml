@@ -1,0 +1,45 @@
+name: Check
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_URL: http://localhost:3000
+      SESSION_SECRET: ci-only-isolated-session-secret-over-32-characters
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Start isolated application and worker
+        run: |
+          npm start > /tmp/clipvero-web.log 2>&1 &
+          npm run worker > /tmp/clipvero-worker.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://localhost:3000/login > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/clipvero-web.log
+          exit 1
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-failure
+          path: |
+            test-results/
+            /tmp/clipvero-web.log
+            /tmp/clipvero-worker.log
+          retention-days: 7
