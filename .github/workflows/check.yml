@@ -122,7 +122,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Start API and web
         run: |
-          uv run python -m uvicorn clipvero_api.main:app --host 127.0.0.1 --port 8000 --no-access-log > /tmp/clipvero-api.log 2>&1 &
+          .venv/bin/python -m uvicorn clipvero_api.main:app --host 127.0.0.1 --port 8000 --no-access-log > /tmp/clipvero-api.log 2>&1 &
           pnpm start > /tmp/clipvero-foundation.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://localhost:8000/api/v1/health/ready > /dev/null && curl --silent --fail http://localhost:3000/login > /dev/null; then exit 0; fi
