@@ -91,7 +91,7 @@ export async function generate(job: JobRow, provider: AIProvider = openAI) {
         ),
         "image/png",
         `Scene ${i + 1}.png`,
-        `AI-generated image. OpenAI ${process.env.OPENAI_IMAGE_MODEL || "gpt-image-1"}. Reference-conditioned: ${Boolean(referencePath)}. Consistency requires human review.`,
+        `AI-generated image. OpenAI ${process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"}. Reference-conditioned: ${Boolean(referencePath)}. Consistency requires human review.`,
       );
       scene.assetId = image.id;
       usage(job, "image_generation", 1, { assetId: image.id });

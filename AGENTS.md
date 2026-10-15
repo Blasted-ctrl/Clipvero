@@ -4,6 +4,7 @@ Clipvero helps independent creators, educators, and small marketing teams turn t
 
 ## Repository rules
 
+- Deliver working product changes toward production readiness. Report implemented behavior and remaining blockers; verification is part of delivery.
 - Work directly on `main`. Do not create feature or backup branches unless the user asks for them.
 
 - Keep product specifications here, visual specifications in UI.md, and engineering contracts in CODING.md. README.md is the requested quick-start guide. Create no other original planning Markdown files.
@@ -106,6 +107,8 @@ Before a job completes validate nonempty media, decodability, codec/dimensions/d
 External gates: OpenAI and ElevenLabs credentials/billing; private S3/R2 bucket and scoped credentials; Stripe test account/prices/webhook endpoint and live configuration later; HTTPS deployment, official social developer apps/scopes/app review; transactional email/OAuth providers if enabled; monitoring/support ownership and legal/privacy approval. Secrets stay server-side and untracked. No live AI, payment or publishing verification has occurred.
 
 ## Continuation progress
+
+- Production configuration implemented: `pnpm setup:env` generates missing local secrets and a matching host database URL while preserving existing settings; the README maps provider, storage and deployment settings to their actual consumers. Compose honors `ENVIRONMENT` and passes its database password separately for safe URL encoding. Image generation and provenance now default to supported `gpt-image-2` with explicit PNG output. Local type/lint/format/build, provider/setup regressions, Python checks and API tests pass; an inverted secret-preservation guard is rejected. This setup work does not complete the PostgreSQL private-media/video/billing workflows or verify paid providers.
 
 - Main consolidation verified: https://github.com/Blasted-ctrl/Clipvero/actions/runs/38687347513 . The polished public site and both development backends share `main`, with their histories preserved. Public sessions and saved script handoff use the configured backend; editor requests remain correct after visiting cached public pages. All three verification jobs and merged-branch cleanup pass, including PostgreSQL/Redis, both browser suites, actual MP4 export and Compose readiness. Both working branches are removed; continue directly on `main`.
 

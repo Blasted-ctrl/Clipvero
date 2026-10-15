@@ -97,16 +97,18 @@ export const openAI: AIProvider = {
   },
   async image(prompt, referencePath) {
     let body: object | FormData = {
-      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1",
+      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
       prompt,
       n: 1,
       size: "1024x1536",
+      output_format: "png",
     };
     if (referencePath) {
       const form = new FormData();
-      form.set("model", process.env.OPENAI_IMAGE_MODEL || "gpt-image-1");
+      form.set("model", process.env.OPENAI_IMAGE_MODEL || "gpt-image-2");
       form.set("prompt", prompt);
       form.set("size", "1024x1536");
+      form.set("output_format", "png");
       form.set(
         "image",
         new Blob([new Uint8Array(await readFile(referencePath))]),

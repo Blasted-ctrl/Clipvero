@@ -3,14 +3,16 @@ from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     environment: str = "development"
     app_url: str = "http://localhost:3000"
     database_url: str = "postgresql+psycopg://localhost/clipvero"
+    database_password: SecretStr = SecretStr("")
     redis_url: str = "redis://localhost:6379/0"
     session_secret: str = ""
     session_days: int = 14
@@ -25,6 +27,12 @@ class Settings(BaseSettings):
     def validate_runtime(self) -> "Settings":
         if not self.database_url.startswith("postgresql+psycopg://"):
             raise ValueError("DATABASE_URL must use PostgreSQL with psycopg.")
+        if password := self.database_password.get_secret_value():
+            self.database_url = (
+                make_url(self.database_url)
+                .set(password=password)
+                .render_as_string(hide_password=False)
+            )
         parsed = urlparse(self.app_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("APP_URL must be an absolute HTTP(S) URL.")

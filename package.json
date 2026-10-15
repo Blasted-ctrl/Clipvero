@@ -7,6 +7,7 @@
     "node": ">=24.0.0 <25"
   },
   "scripts": {
+    "setup:env": "tsx scripts/setup-env.ts",
     "dev": "next dev --hostname 127.0.0.1",
     "worker": "tsx --env-file-if-exists=.env src/worker/main.ts",
     "dev:all": "concurrently -k -n web,worker \"pnpm dev\" \"pnpm worker\"",

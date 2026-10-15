@@ -51,12 +51,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      POSTGRES_PASSWORD: ci-isolated-container-password
+      POSTGRES_PASSWORD: "ci-only-a#b@c%"
       SESSION_SECRET: ci-only-container-session-secret-over-32-characters
       APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config --quiet
+      - name: Check production environment propagation
+        run: |
+          ENVIRONMENT=production APP_URL=https://clipvero.example.com docker compose config --format json | python -c '
+          import json, sys
+          services = json.load(sys.stdin)["services"]
+          for name in ("migrate", "api", "worker", "scheduler"):
+              assert services[name]["environment"]["ENVIRONMENT"] == "production", name
+              assert services[name]["environment"]["APP_URL"] == "https://clipvero.example.com", name
+          '
       - run: docker compose up --build --detach --wait --wait-timeout 180
       - run: curl --fail http://localhost:8000/api/v1/health/ready
       - run: curl --fail http://localhost:3000/login

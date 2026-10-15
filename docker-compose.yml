@@ -42,9 +42,10 @@ services:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
     environment: &api_environment
-      ENVIRONMENT: development
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       APP_URL: ${APP_URL:-http://localhost:3000}
-      DATABASE_URL: postgresql+psycopg://clipvero:${POSTGRES_PASSWORD}@postgres:5432/clipvero
+      DATABASE_URL: postgresql+psycopg://clipvero@postgres:5432/clipvero
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_URL: redis://redis:6379/0
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
