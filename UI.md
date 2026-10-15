@@ -18,8 +18,6 @@ Projects shows only persisted workspace records, with a real empty/error/loading
 
 ## Existing studio design system and workflow specification
 
-# Clipvero interface specification
-
 AGENTS.md defines product acceptance and progress. This file defines the intended interface and labels later surfaces explicitly. Never present pending functionality as an active control.
 
 ## Visual contract

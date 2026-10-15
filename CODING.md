@@ -4,7 +4,7 @@
 
 The continuation supersedes the legacy architecture below. Web stays in the repository root during migration, with pnpm workspace packages for the independent video engine and OpenAPI-generated TypeScript contracts. Python uses a uv workspace: services/api (FastAPI) and services/workers (Celery). Do not introduce Redux, synchronous video processing or frontend-owned billing/authorization. Postgres is the production database, Redis the broker/rate-limit store, private S3/R2 the phase-2 media store. Use Python >=3.12, Pydantic 2, SQLAlchemy 2, Alembic, psycopg, HTTPX, Celery and JSON logs. Versions are resolved and committed in uv.lock and pnpm-lock.yaml; never hand-edit locks.
 
-The old SQLite API/worker remains development-only until phases 1?3 pass parity. Explicit deployment mode selects one backend. Never silently fail over, share sessions across stores, or claim automatic data migration. Keep legacy data for export/recovery. Removal requires a separate migration, verified PostgreSQL equivalents, and a documented rollback.
+The old SQLite API/worker remains development-only until phases 1 through 3 pass parity. Explicit deployment mode selects one backend. Never silently fail over, share sessions across stores, or claim automatic data migration. Keep legacy data for export/recovery. Removal requires a separate migration, verified PostgreSQL equivalents, and a documented rollback.
 
 ## Versioned API and ownership
 
@@ -34,7 +34,7 @@ Canonical commands and actual evidence are recorded in README.md and AGENTS.md a
 
 ## PostgreSQL projects and private-storage boundary
 
-Versioned JSON requests have a 1 MiB UTF-8 limit shared by the proxy, FastAPI and browser save clients. This accommodates the shipped editor?s 60-scene and multibyte-script bounds; larger imported cue payloads fail explicitly and retain local edits. Test multibyte content above the former 64 KB bound.
+Versioned JSON requests have a 1 MiB UTF-8 limit shared by the proxy, FastAPI and browser save clients. This accommodates the shipped editor's 60-scene and multibyte-script bounds; larger imported cue payloads fail explicitly and retain local edits. Test multibyte content above the former 64 KB bound.
 
 Project UUIDs and creation keys are scoped to the authenticated workspace. A creation key is bound to a canonical payload hash; reuse with a changed payload returns 409, and replay of a deleted project does not recreate it. Lists join timeline data in one query and paginate. Current timeline JSONB and normalized scenes update atomically with an immutable ProjectVersion. Validate duration, object uniqueness, frame-safe captions, known fields and media ownership before accepting edits. Presently all nonnull media references are rejected because the private asset lifecycle is not enabled.
 
@@ -54,7 +54,7 @@ The following describes the currently tested Node/SQLite development implementat
 
 ## Stack and repository
 
-Node.js 24, Next.js 16 App Router, React 19, TypeScript, Tailwind 4, shadcn-style Button/Dialog primitives using Radix, TanStack Query for server state, Zustand for per-editor timeline/history, Zod for input/provider schemas, SQLite via `node:sqlite`, FFmpeg/FFprobe for media processing/validation, and Remotion for a shared preview/export composition. Stripe uses its official server SDK; AI uses server-only official REST endpoints. Exact versions are pinned by package-lock.json; all Remotion packages must match.
+Node.js 24, Next.js 16 App Router, React 19, TypeScript, Tailwind 4, shadcn-style Button/Dialog primitives using Radix, TanStack Query for server state, Zustand for per-editor timeline/history, Zod for input/provider schemas, SQLite via `node:sqlite`, FFmpeg/FFprobe for media processing/validation, and Remotion for a shared preview/export composition. Stripe uses its official server SDK; AI uses server-only official REST endpoints. Exact versions are pinned by pnpm-lock.yaml; all Remotion packages must match.
 
 SQLite is a deliberate single-machine development/self-hosting choice, not a distributed database claim. WAL and immediate write transactions support separate website/worker processes on the same local filesystem. Do not place this database on an unreliable network filesystem. Multi-machine deployment needs a reviewed transactional database/queue/object-storage migration.
 
@@ -65,7 +65,7 @@ src/lib/model.ts          Zod input/timeline schemas and plan tariffs
 src/lib/editor-store.ts   Per-editor timeline undo/redo
 src/lib/edit-operations.ts Validated command operations
 src/server/               Auth, persistence, projects, media, queue, AI, billing
-src/video/                Shared Remotion composition and renderer entry
+packages/video-engine/    Shared Remotion composition and renderer entry
 src/worker/               Queue/scheduler process, generation and rendering
 migrations/               Idempotent bootstrap SQL
 scripts/                  Database bootstrap command
@@ -200,7 +200,7 @@ Next loads .env; worker/migration scripts load it explicitly. Never put secrets 
 
 ## Development, tests and deployment
 
-Commands are in package.json: dev:all, dev, worker, db:migrate, check, typecheck, lint, test, test:e2e, build, start. Use Node 24 on Windows/Linux/macOS. The worker needs a compatible Chromium/headless-browser install and system dependencies. npm ci downloads FFmpeg/FFprobe. The browser acceptance suite uses a dedicated Playwright browser profile, development accounts and real renders; never run against production data. Domain tests use a temporary database and remove only their verified temp directory.
+Commands are in package.json: dev:all, dev, worker, db:migrate, check, typecheck, lint, test, test:e2e, build, start. Use Node 24 on Windows/Linux/macOS. The worker needs a compatible Chromium/headless-browser install and system dependencies. pnpm install --frozen-lockfile downloads FFmpeg/FFprobe. The browser acceptance suite uses a dedicated Playwright browser profile, development accounts and real renders; never run against production data. Domain tests use a temporary database and remove only their verified temp directory.
 
 Verification layers: schema/domain invariants, cross-workspace HTTP cases, test-only provider/webhook adapters, a complete browser workflow, real render/FFprobe, responsive screenshots, and accessibility checks. Runtime warnings for Node 24's experimental SQLite API are expected; browser console errors and failed requests need investigation. CI must typecheck/lint/test/build and run browser/render tests on a writable ephemeral volume; no provider secret required for manual export. Live AI, Stripe and platform tests are separate opt-in release gates.
 
