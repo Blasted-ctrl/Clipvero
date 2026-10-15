@@ -8,6 +8,7 @@ const sections = [
   "projects",
   "characters",
   "pipelines",
+  "automation",
   "review",
   "calendar",
   "analytics",

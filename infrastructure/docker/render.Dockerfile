@@ -6,6 +6,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
 COPY src ./src
+COPY scripts ./scripts
 COPY migrations ./migrations
 COPY tsconfig.json ./
 RUN mkdir -p /app/data /app/.render && chown -R node:node /app/data /app/.render

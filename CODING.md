@@ -1,5 +1,11 @@
 # Clipvero engineering contract
 
+## Personal agent automation scope
+
+The owner prioritizes an end-to-end run on the working Node/SQLite studio before resuming PostgreSQL migration. This scope does not satisfy public SaaS parity gates below. Keep it behind `CLIPVERO_BACKEND=legacy` and reuse real video jobs/credits. MCP uses authenticated Streamable HTTP and a stdio bridge. Agent credentials are hashed, expiring and revocable; only owner sessions issue grants. Bind request UUIDs to canonical payloads, reserve batches atomically and enforce lifetime count/credit caps. Check Host/Origin, bound input and reject multi-output modes that could evade allowances.
+
+OAuth states are hashed, owner/workspace-bound, expiring and single-use. Encrypt provider tokens with AES-GCM and a dedicated HKDF key from stable SESSION_SECRET, binding ciphertext to connection ID. Refresh under fenced per-account leases. Persist per-destination intents before external effects. Fence every publisher mutation with a live claim token and reserve schedule spacing atomically. Unknown writes reconcile without blind replay. Recheck grant, destination and approved revision before submission; serve only that output through expiring signed media links. Instagram may auto-approve under owner policy; TikTok always requires current creator settings and explicit per-video consent. Local cancellation cannot undo an accepted TikTok post. Preserve numeric int64 provider IDs without precision loss. Never log tokens, OAuth codes or signed URLs. Node pilot migrations do not replace Alembic contracts for PostgreSQL.
+
 ## Required service architecture
 
 The continuation supersedes the legacy architecture below. Web stays in the repository root during migration, with pnpm workspace packages for the independent video engine and OpenAPI-generated TypeScript contracts. Python uses a uv workspace: services/api (FastAPI) and services/workers (Celery). Do not introduce Redux, synchronous video processing or frontend-owned billing/authorization. Postgres is the production database, Redis the broker/rate-limit store, private S3/R2 the phase-2 media store. Use Python >=3.12, Pydantic 2, SQLAlchemy 2, Alembic, psycopg, HTTPX, Celery and JSON logs. Versions are resolved and committed in uv.lock and pnpm-lock.yaml; never hand-edit locks.
@@ -169,9 +175,9 @@ Stripe monthly price IDs map to central Starter/Creator/Studio entitlements. Che
 
 ## Publishing contract and external blockers
 
-Current application has no live OAuth publishing adapter. Connection state is unavailable and no Publish button is shown. Calendar reminders do not perform network publication. This is explicit pending implementation, not credential-only completion.
+The Node personal workflow implements official Instagram Login/Reels and TikTok Login/Direct Post adapters, encrypted account connections and a separate durable publisher. Live credentials and platform approvals remain unverified. TikTok requires per-video review in Clipvero; Instagram may follow owner-authorized automatic approval. Calendar reminders remain manual reminders. PostgreSQL publishing and YouTube are still pending.
 
-Future adapter interface: authorize(workspace,state/PKCE) → consent URL; exchange(code,state) → encrypted account/scopes/expiry; refresh(account) → valid tokens; validate(approvedRender,destination) → platform issues; submit(immutablePublication) → provider submission ID; reconcile(submission) → pending/processing/published/failed + evidence/URL/retryEligible. Never return published from upload acceptance alone. Test-only adapter must simulate revoked scopes, timeout after upload, duplicate request and reconciliation without production success paths. Official APIs and scopes/app reviews are required for YouTube uploads, TikTok posting and Instagram professional-account publishing. Unknown upload outcomes require reconciliation before retrying to avoid duplicate posts. Signed public asset delivery/object storage is required where platforms fetch media.
+Adapters authorize the owner, exchange and refresh encrypted tokens, validate current render/destination metadata, persist submission IDs and reconcile actual outcomes. Never return published from upload acceptance alone. Contract fixtures cover revoked access, timeout after upload, duplicate requests, refresh contention, lease expiry and reconciliation; they do not prove live platform access. Official scopes/app reviews remain required. Unknown writes never automatically resubmit. Signed public media delivery is restricted to the authorized publication and revision.
 
 ## Auth, privacy and observability
 

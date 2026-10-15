@@ -16,7 +16,7 @@ pnpm setup:env
 pnpm dev:all
 ```
 
-Open **http://localhost:3000**, create an account and choose **Script to video**. Separate scenes with blank lines. You can edit, render, approve and download a video without an AI key or a card. Keep the terminal open while rendering; it runs both the website and its video worker.
+Open **http://localhost:3000**, create an account and choose **Script to video**. Separate scenes with blank lines. You can edit, render, approve and download a video without an AI key or a card. Keep the terminal open; it runs the website, video worker and publisher.
 
 New accounts receive 120 trial credits once. A manual render costs one credit per minute, rounded up; failed jobs refund reserved credits. The ignored `data/` directory holds this studio's database, uploads and exports. Keep it on persistent local storage and back it up.
 
@@ -53,7 +53,7 @@ OPENAI_IMAGE_MODEL=gpt-image-2
 
 These settings are consumed by the Node video worker. They enable its provider requests for scripts, narration, images and transcription; requests still depend on your account's model access and limits. The image adapter explicitly requests PNG output. Existing `.env` files retain their model setting, so replace `gpt-image-1` if it is still configured: OpenAI lists it for retirement on October 23, 2026. See the [official deprecations](https://developers.openai.com/api/docs/deprecations) and [image model documentation](https://developers.openai.com/api/docs/models/gpt-image-2).
 
-Stop and restart `pnpm dev:all` after editing the file so the website and worker both reload the key. Supplied-script narration, ElevenLabs and several advanced formats still require implementation; adding extra environment names will not enable them.
+Stop and restart `pnpm dev:all` after editing the file so the website and worker reload the key. Agent batches can request narration for an unchanged supplied script; the studio's manual script form does not expose that option yet. ElevenLabs and several advanced formats still require implementation; extra environment names will not enable them.
 
 ### 3. Connect Stripe subscriptions
 
@@ -151,9 +151,47 @@ The Compose services now honor `ENVIRONMENT`; production FastAPI startup require
 
 `FFMPEG_PATH`, `FFPROBE_PATH` and `REMOTION_BROWSER_EXECUTABLE` may stay blank locally. Set them only when supplying your own installed binaries; the render container already sets its Linux binary paths.
 
+## Run your own content workflow with an agent
+
+Use the Node studio (`CLIPVERO_BACKEND=legacy`) for this workflow. The PostgreSQL Compose deployment does not expose these operations yet.
+
+1. Add your OpenAI key as described above and restart `pnpm dev:all`. For a first run without provider charges, the agent can render an unchanged script with voice `none` and images disabled. AI narration/images require your key and incur provider charges.
+2. Open **Automation** in the sidebar. Connect your publishing accounts after completing the account setup below.
+3. Choose **Connect an agent**. Start with **1 video**, a credit allowance and an expiry. Select the destination accounts and local start/end times. The saved schedule uses UTC instants; elapsed minutes determine spacing across daylight-saving changes. The guided video always needs your review.
+4. Save the one-time token in your MCP client's private settings. An HTTP MCP client uses `https://YOUR_DOMAIN/api/mcp` with `Authorization: Bearer YOUR_TOKEN`. For a stdio client, launch `pnpm --silent --dir C:/Users/kings/Clipvero agent:mcp` with `CLIPVERO_URL` and `CLIPVERO_AGENT_TOKEN` in its environment. The bridge forwards requests to your website. Clients must support Bearer HTTP or stdio; OAuth connector discovery is not implemented.
+5. Ask the agent to create one original short. It inspects its allowance with `clipvero_status`, calls `clipvero_create_batch` with a UUID `requestId`, then polls `clipvero_get_batch`. Reuse that request ID for retries of the same request. Credits and durable job IDs are stored before returning, so rendering continues after the agent disconnects. Open the returned review URL or the publishing queue to inspect the real output.
+6. Once that run works, issue a **new** allowance for **3**, then **5**, then **8** videos. These are lifetime limits across all requests with that token. Automatic approval applies to Instagram within your destinations, window and spacing. **Every TikTok video requires review, audience selection and consent in Clipvero.** Agents cannot increase limits or approve TikTok posts.
+
+Agents can create supported script, prompt, story, character, explainer and marketing jobs and read their own results. Source clipping/gameplay batches are rejected so one job cannot evade the video allowance. Failed attempts still count against that token's allowance; job refunds return credits to the workspace. Internal credits are a fixed processing tariff, not a dollar cap on your provider's bill. Inspect usage and control provider spending separately.
+
+The website, video worker and publisher must share persistent `DATA_DIR`, `APP_URL` and stable `SESSION_SECRET`. `pnpm dev:all` runs all three locally; separate processes use `pnpm dev`, `pnpm worker` and `pnpm publisher`. The render Dockerfile can also run the publisher with `pnpm exec tsx scripts/publisher.ts`. Keep one durable volume on one host for this personal workflow. SQLite is not a distributed multi-host queue.
+
+### Connect Instagram and TikTok
+
+You need a public **HTTPS origin** for OAuth callbacks and platform video downloads, even when workers run on your computer. Open Clipvero through that origin, set it as `APP_URL`, and restart all three processes. Localhost alone cannot complete publishing. A stable HTTPS tunnel or private server can supply the origin; public customer signup is not needed for your guided run.
+
+Add these four values to your private `.env` after creating the developer apps:
+
+```dotenv
+INSTAGRAM_APP_ID=your_instagram_app_id
+INSTAGRAM_APP_SECRET=your_instagram_app_secret
+TIKTOK_CLIENT_KEY=your_tiktok_client_key
+TIKTOK_CLIENT_SECRET=your_tiktok_client_secret
+```
+
+**Instagram:** In your [Meta developer app](https://developers.facebook.com/apps/), enable **Instagram API with Instagram Login**. Use the Instagram App ID/secret from that setup, switch your Instagram account to a professional Business or Creator account, and add it to your app's authorized developer/tester setup. Register `https://YOUR_DOMAIN/api/social/callback/instagram` as the exact redirect URI. Clipvero requests `instagram_business_basic` and `instagram_business_content_publish`. Then use **Automation → Connect Instagram**. Account roles/access and public app review must satisfy Meta's requirements. See [Instagram login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login) and [publishing](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing).
+
+**TikTok:** Create an app in [TikTok for Developers](https://developers.tiktok.com/), enable **Login Kit** and **Content Posting API / Direct Post**, and request `user.info.basic` and `video.publish`. Register `https://YOUR_DOMAIN/api/social/callback/tiktok` as the Web redirect URI. Verify ownership of your media domain or the prefix `https://YOUR_DOMAIN/api/social/media/` through its URL properties setup. Then use **Automation → Connect TikTok**. Clipvero loads current creator settings, requires an audience choice, keeps interactions off by default, collects commercial disclosures and music-usage consent, and submits the reviewed render.
+
+TikTok restricts unaudited Direct Post clients to private accounts and “Only me” visibility. Public posting requires its audit; a private upload cannot prove public reach. TikTok also requires an app intended for a broad creator audience rather than solely an internal upload utility. See [Direct Post setup](https://developers.tiktok.com/docs/en/content-posting-api-get-started) and [sharing requirements](https://developers.tiktok.com/docs/en/content-sharing-guidelines).
+
+Connections store encrypted tokens; agent tokens store only hashes. Preserve `SESSION_SECRET` privately: changing it makes saved social credentials unreadable. Videos use time-limited links bound to the publication and rendered revision. Revoking a grant stops queued work; disconnecting an account removes saved credentials. An accepted platform submission may still finish. The queue keeps that outcome visible instead of claiming cancellation. An unknown write is never automatically resubmitted; check the platform account before creating another submission.
+
+Publishing shows actual provider processing/completion states and available post IDs/Instagram links. Adapters have contract coverage with explicit fixtures; **no live account connection, AI generation or social post has been verified with your credentials**. Engagement collection is pending: use real platform analytics for the 1 → 3 → 5 → 8 runs. Track failures, time saved and actual views before deciding whether to launch.
+
 ## Production work still required
 
-The next implementation work is to connect private assets, durable video jobs, generation, rendering, review and billing to the same PostgreSQL workspace and credit ledger. Account recovery, permanent data deletion, official social publishing, measured analytics, monitoring, backups with verified restore and the final hosting/TLS setup also remain open. No live AI generation, payment or private bucket has been verified with your credentials.
+The immediate priority is a guided creation-and-publishing run on your own accounts. Before a public SaaS launch, connect private assets, durable video jobs, generation, rendering, review and billing to the same PostgreSQL workspace and credit ledger. Account recovery, permanent data deletion, live social verification/app approvals, measured analytics, monitoring, backups with verified restore and hosting/TLS also remain open. No live AI generation, payment or private bucket has been verified with your credentials.
 
 Product requirements and implementation status are in [AGENTS.md](AGENTS.md), interface behavior in [UI.md](UI.md), and engineering rules in [CODING.md](CODING.md). Development stays on `main`.
 

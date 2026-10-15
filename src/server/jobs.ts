@@ -10,6 +10,11 @@ export type JobRow = Job & {
 };
 const select =
   "SELECT id,workspace_id AS workspaceId,project_id AS projectId,pipeline_id AS pipelineId,kind,state,stage,progress,error,input,revision,cost,lease_until AS leaseUntil,created_at AS createdAt FROM jobs";
+export function getJob(workspace: string, id: string) {
+  return requireValue(
+    one<JobRow>(`${select} WHERE workspace_id=? AND id=?`, workspace, id),
+  );
+}
 export function listJobs(workspace: string) {
   return all<JobRow>(
     `${select} WHERE workspace_id=? ORDER BY created_at DESC LIMIT 100`,

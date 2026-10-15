@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { duration, modes, plans, type Project } from "@/lib/model";
 import { api, useAction, useApp } from "./app-provider";
+import { AutomationPage } from "./automation";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { CreateFlow, modeIcons } from "./create-flow";
@@ -41,6 +42,7 @@ import {
 import { AssetLibrary, CharacterStudio, SettingsPage } from "./workspace-pages";
 
 export function StudioPage({ section }: { section: string }) {
+  if (section === "automation") return <AutomationPage />;
   if (section === "create")
     return (
       <Suspense fallback={<p>Opening creation tools…</p>}>
@@ -287,8 +289,8 @@ function Overview() {
       <div className="connection-note">
         <span>
           <span className="subtle-dot" />
-          {data.projects.filter((p) => p.status === "scheduled").length}{" "}
-          publishing reminders · Social accounts are not connected
+          {data.projects.filter((p) => p.status === "scheduled").length} manual
+          reminders · Manage agent publishing in Automation
         </span>
         <Link href="/settings">
           Manage workspace <ArrowRight size={14} />
@@ -839,7 +841,7 @@ export function ScheduleButton({ project: p }: { project: Project }) {
       </Button>
       <Dialog
         title="Plan your publishing time"
-        description="This saves a calendar reminder. Download the MP4 and publish it manually. Automatic social publishing is not available in this release."
+        description="This saves a manual calendar reminder. Manage authorized Instagram and TikTok publishing in Automation."
         open={open}
         onOpenChange={setOpen}
       >

@@ -27,10 +27,11 @@ jobs:
       - run: pnpm check
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Start isolated application and worker
+      - name: Start isolated application and workers
         run: |
           pnpm start > /tmp/clipvero-web.log 2>&1 &
           pnpm worker > /tmp/clipvero-worker.log 2>&1 &
+          pnpm publisher > /tmp/clipvero-publisher.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://localhost:3000/login > /dev/null; then exit 0; fi
             sleep 1
@@ -46,6 +47,7 @@ jobs:
             test-results/
             /tmp/clipvero-web.log
             /tmp/clipvero-worker.log
+            /tmp/clipvero-publisher.log
           retention-days: 7
   containers:
     runs-on: ubuntu-latest

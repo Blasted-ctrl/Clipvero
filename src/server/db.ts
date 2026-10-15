@@ -15,6 +15,8 @@ db.exec(
   "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=10000;",
 );
 db.exec(readFileSync(resolve("migrations/001_initial.sql"), "utf8"));
+db.exec(readFileSync(resolve("migrations/002_agent_automation.sql"), "utf8"));
+db.exec(readFileSync(resolve("migrations/003_social.sql"), "utf8"));
 export function one<T>(sql: string, ...args: SQLInputValue[]) {
   return db.prepare(sql).get(...args) as T | undefined;
 }
