@@ -12,11 +12,25 @@ export const db =
   globalDb.clipveroDb ?? new DatabaseSync(resolve(dataDir, "clipvero.db"));
 globalDb.clipveroDb = db;
 db.exec(
-  "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=10000;",
+  "PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;",
 );
-db.exec(readFileSync(resolve("migrations/001_initial.sql"), "utf8"));
-db.exec(readFileSync(resolve("migrations/002_agent_automation.sql"), "utf8"));
-db.exec(readFileSync(resolve("migrations/003_social.sql"), "utf8"));
+transaction(() => {
+  db.exec(readFileSync(resolve("migrations/001_initial.sql"), "utf8"));
+  db.exec(readFileSync(resolve("migrations/002_agent_automation.sql"), "utf8"));
+  db.exec(readFileSync(resolve("migrations/003_social.sql"), "utf8"));
+  // Databases created by pre-release drafts of 003 lack these lease columns.
+  for (const [table, column, type] of [
+    ["social_connections", "refresh_until", "INTEGER"],
+    ["social_connections", "refresh_owner", "TEXT"],
+    ["publications", "lease_token", "TEXT"],
+  ] as const) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as {
+      name: string;
+    }[];
+    if (!columns.some((c) => c.name === column))
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+});
 export function one<T>(sql: string, ...args: SQLInputValue[]) {
   return db.prepare(sql).get(...args) as T | undefined;
 }
