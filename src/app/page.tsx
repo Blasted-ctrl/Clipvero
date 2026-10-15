@@ -7,13 +7,13 @@ import {
   ListChecks,
   Workflow,
 } from "lucide-react";
-import { identity } from "@/server/auth";
+import { currentUser } from "@/server/backend";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { plans } from "@/lib/model";
 export default async function Home() {
-  if (await identity()) redirect("/overview");
+  if (await currentUser()) redirect("/overview");
   return (
     <div className="marketing">
       <header>

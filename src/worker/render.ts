@@ -15,7 +15,7 @@ import {
   timelineSchema,
   type Timeline,
 } from "../lib/model";
-import type { MediaMap } from "../video/composition";
+import type { MediaMap } from "@clipvero/video-engine/composition";
 
 let bundled: Promise<string> | undefined;
 let server: Server | undefined;
@@ -89,7 +89,7 @@ export async function renderProject(
   timelineSchema.parse(timeline);
   stage(job.id, "Composing scenes");
   bundled ??= bundle({
-    entryPoint: resolve("src/video/root.tsx"),
+    entryPoint: resolve("packages/video-engine/src/root.tsx"),
     outDir: resolve(".render/bundle"),
     publicDir: null,
   });
@@ -108,6 +108,7 @@ export async function renderProject(
   }
   const inputProps = { timeline, media };
   const composition = await selectComposition({
+    browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE,
     serveUrl,
     id: "Clipvero",
     inputProps,
@@ -117,6 +118,7 @@ export async function renderProject(
     output = resolve(dataDir, "assets", filename);
   stage(job.id, "Rendering", 0);
   await renderMedia({
+    browserExecutable: process.env.REMOTION_BROWSER_EXECUTABLE,
     composition,
     serveUrl,
     inputProps,

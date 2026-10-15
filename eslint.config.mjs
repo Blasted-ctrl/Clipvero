@@ -6,6 +6,10 @@ export default defineConfig([
   ...ts,
   globalIgnores([
     ".next/**",
+    ".tools/**",
+    ".venv/**",
+    ".local-services/**",
+    "packages/shared-types/src/api.d.ts",
     "data/**",
     ".render/**",
     "next-env.d.ts",

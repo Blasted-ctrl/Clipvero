@@ -1,3 +1,19 @@
+# Clipvero visual and interaction specification
+
+## Foundation migration surface
+
+Retain the existing dark violet studio identity, typography, spacing, focus treatment and responsive shell described below. Foundation mode is a real authenticated workspace dashboard backed by FastAPI. Its navigation exposes only working Overview and Settings destinations; explain once that project/media tools are being migrated. The legacy development studio remains a separate explicit process configuration. Do not present empty legacy projects as migrated Postgres data.
+
+Registration/login preserve the existing compact labeled form, with React Hook Form and Zod field validation, disabled submit while pending, accessible field errors and server failure message. Successful auth reaches Overview. Logout revokes the actual session and clears cached state. No demo identity or fabricated activity. Session expiry returns to login; an unreachable API displays an actionable retry state, not a login redirect.
+
+Overview shows the actual signed-in name, workspace name, membership role and credit balance returned by the protected API. No fake engagement/chart/placeholder project. Offer a real workspace-settings action and concise availability notice. Settings loads current account/workspace fields, permits account-name changes, restricts workspace rename to owner/admin, persists updates and confirms success with Sonner. Failed updates retain typed values. Theme control switches dark/light with persisted browser preference, readable contrast and reduced-motion support. Sidebar becomes a labeled mobile drawer; all actions remain keyboard accessible.
+
+Loading skeletons describe the pending resource; empty states explain the next available action; errors provide retry without erasing input. Root and studio error boundaries permit recovery and never expose internal stack traces. API errors have a human message plus request ID for support. Test desktop and 320px layouts, protected-route redirect, complete signup/logout/login/settings, tenant isolation, keyboard/focus, contrast and actual persistence.
+
+Later phases extend the same visual system: phase 2 project/assets/autosave states; phase 3 measured render progress and preview/export parity; phase 4 honest provider configuration and synchronized generation; phase 5 character/voice/reference approvals and working format previews; phase 6 editable coherent clip candidates and undoable proposals; phase 7 budgets/schedules/history/review; phase 8 real reconciled billing; phase 9 approved destinations and explicit consent; phase 10 source-labeled real metrics; phase 11 privacy/deletion/recovery/support. Recharts has no data until measured metrics exist; dnd-kit must also support keyboard reordering. Do not ship nonfunctional buttons or claim unconfigured integrations work.
+
+## Existing studio design system and workflow specification
+
 # Clipvero interface specification
 
 AGENTS.md defines product acceptance and progress. This file defines the intended interface and labels later surfaces explicitly. Never present pending functionality as an active control.

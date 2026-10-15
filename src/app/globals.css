@@ -3852,3 +3852,125 @@ code {
     transition: none !important;
   }
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f7fa;
+  --surface: #ffffff;
+  --surface-2: #efeff5;
+  --interactive: #e5e5ee;
+  --text: #191724;
+  --secondary: #555264;
+  --muted: #635f73;
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
+  --border: #d6d4df;
+}
+.foundation-sidebar-actions {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+}
+.foundation-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 36px 24px;
+}
+.foundation-content h1 {
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.15;
+  letter-spacing: -1px;
+  margin: 12px 0 20px;
+}
+.foundation-facts {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  border-block: 1px solid var(--border);
+  margin: 36px 0;
+  padding: 24px 0;
+  gap: 24px;
+}
+.foundation-facts dt {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.foundation-facts dd {
+  font-size: 20px;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+.foundation-notice {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.foundation-notice h2,
+.foundation-settings h2 {
+  font-size: 19px;
+}
+.foundation-notice p {
+  color: var(--secondary);
+  max-width: 580px;
+  margin-bottom: 24px;
+}
+.foundation-settings {
+  display: grid;
+  gap: 36px;
+  margin-top: 32px;
+  max-width: 520px;
+}
+.foundation-settings section {
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .foundation-facts {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .foundation-content {
+    padding: 24px 16px;
+  }
+}
+
+.foundation-shell .sidebar,
+.foundation-shell .topbar {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.foundation-shell .nav-item {
+  color: var(--secondary);
+}
+.foundation-shell .nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.foundation-shell .nav-active {
+  color: var(--accent-hover);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.foundation-shell .workspace-badge {
+  background: var(--surface-2);
+}
+.foundation-shell .form-stack label {
+  color: var(--secondary);
+}
+.foundation-shell .form-stack input {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.foundation-shell .workspace-copy strong,
+.foundation-shell .logo {
+  color: var(--text);
+}
+.foundation-shell .mobile-toggle {
+  display: none;
+}
+@media (max-width: 767px) {
+  .foundation-shell .mobile-toggle {
+    display: inline-flex;
+  }
+}

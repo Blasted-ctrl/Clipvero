@@ -1,6 +1,6 @@
 import { Composition, registerRoot } from "remotion";
 import { VideoComposition } from "./composition";
-import { dimensions, duration, scriptTimeline } from "../lib/model";
+import { dimensions, duration, scriptTimeline } from "./model";
 const fallback = scriptTimeline("Clipvero", "9:16", 2);
 function Root() {
   return (

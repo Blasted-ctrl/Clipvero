@@ -1,7 +1,7 @@
 name: Check
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
 permissions:
   contents: read
@@ -15,25 +15,29 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm check
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
       - name: Start isolated application and worker
         run: |
-          npm start > /tmp/clipvero-web.log 2>&1 &
-          npm run worker > /tmp/clipvero-worker.log 2>&1 &
+          pnpm start > /tmp/clipvero-web.log 2>&1 &
+          pnpm worker > /tmp/clipvero-worker.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --silent --fail http://localhost:3000/login > /dev/null; then exit 0; fi
             sleep 1
           done
           cat /tmp/clipvero-web.log
           exit 1
-      - run: npm run test:e2e
+      - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -42,4 +46,96 @@ jobs:
             test-results/
             /tmp/clipvero-web.log
             /tmp/clipvero-worker.log
+          retention-days: 7
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      POSTGRES_PASSWORD: ci-isolated-container-password
+      SESSION_SECRET: ci-only-container-session-secret-over-32-characters
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose up --build --detach --wait --wait-timeout 180
+      - run: curl --fail http://localhost:8000/api/v1/health/ready
+      - run: curl --fail http://localhost:3000/login
+      - if: failure()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-bookworm
+        env:
+          POSTGRES_DB: clipvero_test
+          POSTGRES_USER: clipvero
+          POSTGRES_PASSWORD: ci-isolated-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U clipvero -d clipvero_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7.4-bookworm
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 20
+    env:
+      ENVIRONMENT: test
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql+psycopg://clipvero:ci-isolated-password@localhost:5432/clipvero_test
+      CLIPVERO_TEST_DATABASE_URL: postgresql+psycopg://clipvero:ci-isolated-password@localhost:5432/clipvero_test
+      REDIS_URL: redis://localhost:6379/0
+      CLIPVERO_TEST_REDIS_URL: redis://localhost:6379/0
+      CLIPVERO_BACKEND: fastapi
+      API_BACKEND_URL: http://localhost:8000
+      SESSION_SECRET: ci-only-isolated-session-secret-over-32-characters
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+          python-version: "3.12"
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: uv sync --frozen
+      - run: uv run ruff check services scripts/export_openapi.py
+      - run: uv run ruff format --check services scripts/export_openapi.py
+      - run: uv run mypy
+      - run: uv run python -m alembic -c services/api/alembic.ini upgrade head
+      - run: uv run pytest -q
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm types:api
+      - run: git diff --exit-code -- packages/shared-types
+      - run: pnpm format:check
+      - run: pnpm check
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Start API and web
+        run: |
+          uv run python -m uvicorn clipvero_api.main:app --host 127.0.0.1 --port 8000 --no-access-log > /tmp/clipvero-api.log 2>&1 &
+          pnpm start > /tmp/clipvero-foundation.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://localhost:8000/api/v1/health/ready > /dev/null && curl --silent --fail http://localhost:3000/login > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - run: pnpm exec playwright test -c playwright.foundation.config.ts
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-failure
+          path: |
+            test-results/
+            /tmp/clipvero-api.log
+            /tmp/clipvero-foundation.log
           retention-days: 7

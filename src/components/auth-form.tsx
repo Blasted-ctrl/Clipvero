@@ -1,5 +1,9 @@
 "use client";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { foundationApi } from "@/lib/foundation-api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Film } from "lucide-react";
@@ -7,7 +11,25 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "./app-provider";
 import { Logo } from "./shell";
 import { Button } from "./ui/button";
-export function AuthForm({ signup = false }: { signup?: boolean }) {
+const formSchema = z.object({
+  email: z.email().max(254),
+  password: z.string().min(12, "Use at least 12 characters.").max(128),
+  name: z.string().trim().min(1, "Enter your name.").max(80).optional(),
+});
+export function AuthForm({
+  signup = false,
+  foundation = false,
+}: {
+  signup?: boolean;
+  foundation?: boolean;
+}) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+  });
   const router = useRouter(),
     client = useQueryClient(),
     [busy, setBusy] = useState(false),
@@ -32,31 +54,32 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           </p>
           <form
             className="form-stack"
-            onSubmit={async (e) => {
-              e.preventDefault();
+            onSubmit={handleSubmit(async (form) => {
               setBusy(true);
               setError("");
-              const form = new FormData(e.currentTarget);
               try {
-                await api(
+                const submit = foundation ? foundationApi : api;
+                await submit(
                   signup ? "auth/register" : "auth/login",
                   "POST",
-                  Object.fromEntries(form),
+                  form,
                 );
                 client.clear();
                 router.replace("/overview");
+                router.refresh();
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Unable to sign in.");
               } finally {
                 setBusy(false);
               }
-            }}
+            })}
           >
             {signup && (
               <label>
                 Your name
                 <input
-                  name="name"
+                  {...register("name")}
+                  aria-invalid={!!errors.name}
                   autoComplete="name"
                   required
                   maxLength={80}
@@ -67,7 +90,8 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             <label>
               Email address
               <input
-                name="email"
+                {...register("email")}
+                aria-invalid={!!errors.email}
                 type="email"
                 autoComplete="email"
                 required
@@ -77,7 +101,8 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             <label>
               Password
               <input
-                name="password"
+                {...register("password")}
+                aria-invalid={!!errors.password}
                 type="password"
                 autoComplete={signup ? "new-password" : "current-password"}
                 minLength={12}
@@ -86,6 +111,11 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
                 placeholder="At least 12 characters"
               />
             </label>
+            {Object.values(errors).map((field, index) => (
+              <p className="inline-error" role="alert" key={index}>
+                {field.message}
+              </p>
+            ))}
             {error && (
               <p className="inline-error" role="alert">
                 {error}

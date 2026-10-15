@@ -1,0 +1,18 @@
+{
+  "name": "@clipvero/video-engine",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./model": "./src/model.ts",
+    "./composition": "./src/composition.tsx"
+  },
+  "dependencies": {
+    "zod": "^4.6.7",
+    "remotion": "^4.0.535",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0"
+  }
+}

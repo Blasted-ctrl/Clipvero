@@ -2,6 +2,15 @@ node_modules
 .next
 data
 .render
-package-lock.json
+pnpm-lock.yaml
+uv.lock
+.tools
+.venv
+.local-services
+.ruff_cache
+.mypy_cache
+.pytest_cache
+packages/shared-types/openapi.json
+packages/shared-types/src/api.d.ts
 test-results
 playwright-report

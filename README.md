@@ -1,75 +1,68 @@
 # Clipvero
 
-A short-form video workspace for turning your own scripts and footage into editable, downloadable videos.
+Clipvero turns your own scripts and footage into editable short videos. It is under development and is **not ready for a public commercial launch**.
 
-Clipvero is an early development release, not a finished commercial service. Create an account, write a script, edit scenes and captions, render an MP4, review it, and download it. AI generation needs your own OpenAI API key. Social publishing is not available yet.
+There are currently two development paths. The existing local studio can edit and export videos. The new FastAPI foundation provides PostgreSQL accounts, workspace permissions and settings. Projects and media are being migrated; the two paths have separate accounts and data.
 
-## Run it on your computer
+## Try the existing video studio
 
-You need **Node.js 24** and **Git**. The first install downloads video-processing tools and may take a few minutes.
+Install **Node.js 24** and **pnpm 10.33**, then run:
 
 ```sh
-git clone https://github.com/Blasted-ctrl/Clipvero.git
+git clone --branch feature/studio-foundation https://github.com/Blasted-ctrl/Clipvero.git
 cd Clipvero
-npm ci
-npm run dev:all
+pnpm install --frozen-lockfile
+pnpm dev:all
 ```
 
-Open **http://localhost:3000**, create an account, and choose **Script to video**. Use a blank line between scenes. No API key or credit card is needed for this workflow.
+Open **http://localhost:3000**, create an account, and choose **Script to video**. Separate scenes with blank lines. Edit captions, timing, images, video and audio; preview; render an MP4; approve it; and download it. No AI key or card is required.
 
-The app and its render worker run together. Keep the terminal open while rendering. Your database and media are saved in the ignored `data/` folder. New accounts receive 120 one-time trial credits. Editing is free. A manual render costs one credit per minute, rounded up. Failed jobs return their reserved credits.
+Keep the terminal open while rendering. The app and its separate worker save the database and media in the ignored `data/` folder. New accounts receive 120 one-time trial credits. Editing is free; a manual render costs one credit per minute, rounded up. Failed jobs refund reserved credits.
 
-## Add AI generation
+Copy `.env.example` to `.env` to configure the app. Keep `CLIPVERO_BACKEND=legacy` for this path. Optional OpenAI and Stripe adapters exist, but real generation and payments still need credentials and verification. Social publishing is unavailable; calendar entries are manual reminders.
 
-Copy `.env.example` to `.env` in the project folder and add your key:
+## Run the FastAPI foundation
 
-```dotenv
-OPENAI_API_KEY=your-key-here
-```
-
-Restart the app and worker. You can then request AI scripts, synthetic narration, scene illustrations, or transcript-based excerpts from uploaded videos. Review generated claims, captions, and character consistency before exporting. Provider usage is billed to your AI provider account separately.
-
-The example file lists model settings and optional Stripe configuration. Keep real keys in `.env`, never in source files. `.env`, local databases, uploaded media, build output, and test results are ignored by Git.
-
-## What works, and what still needs work
-
-| Area                            | Current state                                                                     |
-| ------------------------------- | --------------------------------------------------------------------------------- |
-| Accounts and private workspaces | Local email/password accounts and private saved data                              |
-| Script editor                   | Scene order, timing, captions, media, audio, colors, undo/redo, autosave          |
-| Export                          | Separate worker, shared preview/export composition, validated MP4 download        |
-| Review and calendar             | Approvals and manual publishing reminders                                         |
-| Characters and styles           | Saved character references and creator presets                                    |
-| AI creation                     | OpenAI adapters implemented; live calls need credentials and validation           |
-| Autopilots                      | Scheduled/manual jobs, spending limits, review-first output                       |
-| Long videos                     | Timestamped transcription and duration-based excerpts; advanced analysis pending  |
-| Billing                         | Stripe Checkout, portal, and signed webhooks implemented; live billing unverified |
-| Social publishing               | Pending; download and upload your MP4 manually                                    |
-| Public commercial launch        | Pending the documented security and integration release gates                     |
-
-The full feature inventory, remaining work, and release gates are in [AGENTS.md](AGENTS.md). The interface specification is in [UI.md](UI.md), and engineering contracts are in [CODING.md](CODING.md).
-
-## Development commands
+You need **Docker with Compose**. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a random URL-safe password and `SESSION_SECRET` to a random secret of at least 32 characters. Then:
 
 ```sh
-npm run dev          # Website only
-npm run worker       # Render and automation worker
-npm run check        # Type checks, lint, and domain tests
-npm run build        # Production build
-npm start            # Serve the production build
+docker compose up --build
 ```
 
-For browser tests, run the app and worker in another terminal, then:
+Open **http://localhost:3000**. Compose runs PostgreSQL, Redis, migrations, FastAPI, Celery maintenance, its scheduler and the website. It explicitly selects the FastAPI backend. Create an account, sign out and in, and update your profile and workspace name. The dashboard shows your actual membership and trial balance. Project creation and rendering are unavailable in this workspace until their migration passes testing.
+
+PostgreSQL and Redis use named Docker volumes. Development ports bind to localhost: PostgreSQL 55432, Redis 56379, API 8000 and web 3000. Stop with `docker compose down`; keep the volumes to retain your data. Do not run both website paths on port 3000 at once. This Compose file is for local development.
+
+To develop Python without containers, install **uv** and Python **3.12 or newer**, provide your own PostgreSQL and Redis, and set valid `DATABASE_URL`, `REDIS_URL`, `APP_URL` and `SESSION_SECRET` values in `.env`:
 
 ```sh
-npx playwright install chromium
-npm run test:e2e
+uv sync --frozen
+uv run python -m alembic -c services/api/alembic.ini upgrade head
+uv run python -m uvicorn clipvero_api.main:app --reload --port 8000
 ```
 
-Browser tests create test accounts and real media. Use a development database, never customer data.
+In separate terminals, run `uv run python -m celery -A clipvero_workers.app:app worker -Q maintenance --loglevel=INFO` and the website with `CLIPVERO_BACKEND=fastapi`. Run Celery in Linux containers; Windows supports API development but is not a production Celery host. API documentation is at **http://localhost:8000/docs**.
 
-## Hosting
+## Checks
 
-Run the website and worker as separate long-running Node processes on the same machine with a shared persistent data volume. Set `APP_URL` to your real HTTPS address and `SESSION_SECRET` to a random value of at least 32 characters. Back up the database and media together.
+```sh
+pnpm check                 # TypeScript, ESLint and domain tests
+pnpm build                 # Next.js production build
+uv run ruff check services scripts/export_openapi.py
+uv run ruff format --check services scripts/export_openapi.py
+uv run mypy
+uv run pytest -q           # Isolated API and worker tests
+pnpm types:api             # Regenerate TypeScript contracts from FastAPI
+```
 
-This version needs a writable filesystem and video-rendering processes. Stateless serverless deployment is not supported. Read the production checklist in `CODING.md` before exposing it publicly.
+Default Python tests use isolated SQLite and an explicit Redis test double. Set `CLIPVERO_TEST_DATABASE_URL` and `CLIPVERO_TEST_REDIS_URL` to **dedicated test services** for PostgreSQL migrations and real broker tests. Never point tests at customer data. CI supplies isolated PostgreSQL and Redis.
+
+Install Chromium with `pnpm exec playwright install chromium`. With the local studio and render worker running, use `pnpm test:e2e`. With FastAPI and its website running, use `pnpm exec playwright test -c playwright.foundation.config.ts`. These workflows create test accounts; studio tests also generate real media.
+
+## Repository layout and status
+
+The Next.js app remains in `src/` to preserve the working studio. `services/api` contains FastAPI and Alembic; `services/workers` contains Celery; `packages/video-engine` contains the shared Remotion composition and timeline schema; `packages/shared-types` contains generated API contracts. Dockerfiles live in `infrastructure/docker`.
+
+The required phase 0?11 roadmap and verified progress are in [AGENTS.md](AGENTS.md). [UI.md](UI.md) describes the interface and [CODING.md](CODING.md) the engineering rules. Later gates include private S3 storage, PostgreSQL video jobs, ElevenLabs, complete creative formats, source analysis, commercial billing, approved social integrations and production operations.
+
+`.env` files, keys, databases, media, local tools, caches, builds and test results stay out of Git. Use `.env.example` as a configuration guide. Production deployment remains gated on security, backup/restore, infrastructure and real integration tests.

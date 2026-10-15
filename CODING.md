@@ -1,5 +1,47 @@
 # Clipvero engineering contract
 
+## Required service architecture
+
+The continuation supersedes the legacy architecture below. Web stays in the repository root during migration, with pnpm workspace packages for the independent video engine and OpenAPI-generated TypeScript contracts. Python uses a uv workspace: services/api (FastAPI) and services/workers (Celery). Do not introduce Redux, synchronous video processing or frontend-owned billing/authorization. Postgres is the production database, Redis the broker/rate-limit store, private S3/R2 the phase-2 media store. Use Python >=3.12, Pydantic 2, SQLAlchemy 2, Alembic, psycopg, HTTPX, Celery and JSON logs. Versions are resolved and committed in uv.lock and pnpm-lock.yaml; never hand-edit locks.
+
+The old SQLite API/worker remains development-only until phases 1?3 pass parity. Explicit deployment mode selects one backend. Never silently fail over, share sessions across stores, or claim automatic data migration. Keep legacy data for export/recovery. Removal requires a separate migration, verified PostgreSQL equivalents, and a documented rollback.
+
+## Versioned API and ownership
+
+FastAPI owns /api/v1, OpenAPI and request/response schemas. Route groups are auth, workspaces, projects, timelines, videos, characters, voices, templates, assets, generation, jobs, pipelines, reviews, publishing, integrations, analytics, usage, billing and settings; implement each when its gate arrives. Do not create empty success endpoints. Generate TS contracts from the actual OpenAPI document. Errors are {error:{code,message},requestId}; use 401 unauthenticated, 403 forbidden, 404 absent or outside workspace, 409 conflicting revision/identity, 422 invalid input, 429 throttled, 503 missing dependency. Unexpected errors expose no stack/secrets. Log request ID/method/path/status/duration, never cookies, passwords or credential-bearing URLs.
+
+Browser traffic uses same-origin /api/v1 proxy with bounded bodies/timeouts and no arbitrary upstream host; forward only needed headers and Set-Cookie. Server pages forward the cookie to the configured fixed API URL. Mutation Origin must equal configured APP_URL, including login/registration/logout; CORS is not a CSRF defense. Do not trust forwarded IP headers without an explicit trusted ingress contract. Fail rate limiting closed when Redis is unavailable.
+
+Reuse salted scrypt credentials and opaque random session tokens: 32 random bytes, SHA-256 stored hash, HttpOnly/SameSite Lax, Secure on HTTPS, bounded expiry, logout revocation. PostgreSQL session/workspace/member records determine access; never trust requested role or workspace ownership. Owner/admin may manage names; editor/viewer may read. Owner transfer/removal and invitations require explicit later workflows. Workspace reads conceal nonmembership with 404. Registration atomically creates user/workspace/owner membership/credit account/one trial transaction/audit. Never grant on login. Normalize emails consistently, catch unique conflicts, bound password byte lengths, and perform dummy scrypt for unknown users. Auth work runs in threadpool handlers, not the event loop.
+
+## Data, migrations and accounting
+
+UUID identities; explicit UTC creation/update timestamps, foreign keys, unique membership/session/ledger keys and indexed ownership. PostgreSQL JSONB is for validated timelines/config/provider metadata, not binaries. Every schema change has Alembic up/down operations; no runtime create_all in deployed applications. Test a fresh upgrade, downgrade and upgrade. Tests may use isolated SQLite only for portable service behavior; PostgreSQL integration tests must prove actual migration/constraint/transaction behavior. Never reset a user database for tests.
+
+Add remaining master-brief entities at their owning phases: projects/versions/timelines/scenes, assets/licenses; characters/references/voices/brands/templates; jobs/events; pipelines/runs/reviews; accounts/destinations/publishing/schedules; usage/notifications/audit; plans/entitlements/subscriptions and credit accounts/transactions. No speculative empty tables. Transactional money uses row locking, uniqueness and immutable reservation price. Persist idempotency intent plus body hash before effects; same key/different payload conflicts. Provider timeout is unknown, not safe to charge/retry twice. Credits cannot become negative; capture/refund/expiry are mutually exclusive and once-only.
+
+## Workers and runtime
+
+Named Celery queues: ai-generation, transcription, asset-generation, video-rendering, publishing, maintenance. Explicit task routing, JSON serialization only, bounded concurrency, late acknowledgement, prefetch 1, time limits, graceful shutdown and Redis visibility timeout exceeding hard task limit. A broker is not the job ledger: generation jobs/events, retries, progress, cancellation and dead letters must persist in PostgreSQL when phase 3 starts. Classify transient/terminal/unknown failures; use bounded exponential backoff only when idempotency permits. No expensive render inside the API or Celery web process. Separate container resource limits and FFmpeg argument arrays.
+
+Docker Compose provides PostgreSQL, Redis, API, Celery and web; render runtime remains separate during migration. Bind development ports to loopback. Require generated credentials through environment, not committed default passwords. Health checks distinguish liveness from dependency readiness; migrations run before API start, not during requests. Containers must shut down gracefully and run as unprivileged users where possible. Production deployment is gated on backups/restore, persistent volumes, secret manager, TLS, resource/load validation, logs/retention and monitoring. Development configuration is not a production launch recipe.
+
+## Frontend and verification
+
+React Query is server state; Zustand is timeline/selection/playback/history. React Hook Form + Zod validates forms; server validation remains authoritative. Sonner supplies accessible notifications. Use dnd-kit with keyboard alternatives, Recharts for actual observations, shared Remotion composition for preview/export. Vitest/RTL cover frontend behavior, Playwright actual cross-process flows; pytest covers API/data/worker contracts; Ruff and strict mypy cover Python. Run strict TS, ESLint, Prettier, tests and production build. CI uses isolated Postgres/Redis services and test-only provider transports; live suites opt in with credentials. Never claim a phase gate using fixtures alone.
+
+Canonical commands and actual evidence are recorded in README.md and AGENTS.md as implemented. Official references: https://fastapi.tiangolo.com/ , https://docs.sqlalchemy.org/en/20/ , https://docs.astral.sh/uv/ , https://docs.celeryq.dev/en/stable/ . Follow current primary documentation when evolving dependencies.
+
+## Compatibility and verification notes
+
+The lockfiles resolve Node 24/Next 16.4.1/React 19.3.1/TypeScript 6.0.3 and matching Remotion 4.0.535 packages; uv uses Python 3.12.13 for local/CI checks. openapi-typescript 7.13.0 declares a TypeScript 5 peer range. Its generation and generated contracts have been verified with the existing TypeScript 6 compiler, while pnpm still reports the peer warning; do not silently suppress it or claim upstream TypeScript 6 support. Starlette's TestClient emits an HTTPX deprecation warning; production HTTPX adapters are unaffected, but test transport migration must be reviewed with the relevant upstream releases. Runtime pnpm audit reports zero advisories; the previously recorded development-only braces advisory is still a separate dependency gate.
+
+`pnpm format:check` verifies repository formatting. Generated API schemas/types and lockfiles are excluded from manual formatting; regeneration must yield a clean diff in CI. Python tests use fresh dedicated PostgreSQL schemas and transaction rollback; default SQLite tests explicitly BEGIN before savepoints to avoid Python SQLite legacy transaction behavior committing fixtures. Real Redis tests namespace limiter keys and never flush a broker. Broker tests require dedicated test services and delete only their own account/workspace fixtures, while the cleanup task itself is intentionally expiry-based.
+
+## Legacy studio reference
+
+The following describes the currently tested Node/SQLite development implementation and remains relevant only until its replacement is verified. Production requirements above take precedence.
+
 ## Stack and repository
 
 Node.js 24, Next.js 16 App Router, React 19, TypeScript, Tailwind 4, shadcn-style Button/Dialog primitives using Radix, TanStack Query for server state, Zustand for per-editor timeline/history, Zod for input/provider schemas, SQLite via `node:sqlite`, FFmpeg/FFprobe for media processing/validation, and Remotion for a shared preview/export composition. Stripe uses its official server SDK; AI uses server-only official REST endpoints. Exact versions are pinned by package-lock.json; all Remotion packages must match.

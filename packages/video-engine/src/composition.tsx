@@ -7,7 +7,7 @@ import {
   interpolate,
   useCurrentFrame,
 } from "remotion";
-import type { Timeline, Scene } from "../lib/model";
+import type { Timeline, Scene } from "./model";
 
 export type MediaMap = Record<string, { src: string; kind: string }>;
 export type CompositionProps = { timeline: Timeline; media: MediaMap };

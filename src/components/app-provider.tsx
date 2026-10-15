@@ -12,6 +12,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { Toaster, toast as sonner } from "sonner";
 import type {
   Asset,
   Character,
@@ -85,32 +86,15 @@ export function Providers({ children }: { children: ReactNode }) {
         defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
       }),
   );
-  const [toast, setToast] = useState<{
-    text: string;
-    error: boolean;
-    id: number;
-  } | null>(null);
   const notify = useCallback((text: string, error = false) => {
-    const id = Date.now();
-    setToast({ text, error, id });
-    window.setTimeout(
-      () => setToast((current) => (current?.id === id ? null : current)),
-      error ? 10000 : 5000,
-    );
+    if (error) sonner.error(text);
+    else sonner.success(text);
   }, []);
   return (
     <QueryClientProvider client={client}>
       <ToastContext.Provider value={notify}>
         {children}
-        {toast && (
-          <div
-            className={`toast ${toast.error ? "toast-error" : ""}`}
-            role={toast.error ? "alert" : "status"}
-            onClick={() => setToast(null)}
-          >
-            {toast.text}
-          </div>
-        )}
+        <Toaster richColors closeButton />
       </ToastContext.Provider>
     </QueryClientProvider>
   );

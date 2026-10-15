@@ -16,9 +16,7 @@ export interface AIProvider {
   }>;
   speech(text: string, voice: string): Promise<Buffer>;
   image(prompt: string, referencePath?: string): Promise<Buffer>;
-  transcribe(
-    path: string,
-  ): Promise<{
+  transcribe(path: string): Promise<{
     text: string;
     segments: { start: number; end: number; text: string }[];
   }>;

@@ -33,7 +33,10 @@ import {
   type Timeline,
 } from "@/lib/model";
 import { createEditorStore } from "@/lib/editor-store";
-import { VideoComposition, type MediaMap } from "@/video/composition";
+import {
+  VideoComposition,
+  type MediaMap,
+} from "@clipvero/video-engine/composition";
 import { api, useAction, useApp, useNotify } from "./app-provider";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";

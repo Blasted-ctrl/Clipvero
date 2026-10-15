@@ -68,113 +68,57 @@ One standard video is at most 60 seconds and includes one text plan, synthetic n
 
 Starter $29/month grants 120 credits (12 standard videos); Creator $79 grants 400 (40); Studio $199 grants 1200 (120). Entitlements live in the central plan table. Paid monthly allowances accumulate; plan-change prorations do not create a second allowance. One-time trial balance is 120, independent of paid billing. Reservation fixes the disclosed job price, capture finalizes it, and a failed job refunds it once. Provider account costs are separate. Future metered premiums/storage need explicit estimates, reconciliation, and customer-visible units before enabling.
 
-## Execution phases and completion gates
+## Required architecture and migration
 
-### Phase 1 — Durable local production loop
+The continuation of the master brief is authoritative. The production architecture is Next.js App Router, React Query, Zustand, React Hook Form/Zod, Radix/shadcn components, Lucide, Sonner, Recharts, dnd-kit and Remotion Player; Python 3.12+, FastAPI, Pydantic 2, SQLAlchemy 2, Alembic, PostgreSQL, Redis, Celery, HTTPX and structured JSON logs. Use pnpm for JavaScript and uv for Python. Separate web, API, Celery and rendering processes. S3-compatible private storage replaces local files in phase 2. Never make video generation synchronous HTTP work.
 
-1. Objective: signup → script → editor → real MP4 → approve/download.
-2. Prerequisites: Node 24, writable disk, FFmpeg/FFprobe, renderer browser.
-3. Modules: lib/model, server/auth/db/projects/jobs/media, video, worker, app, editor UI.
-4. Database/API: users/workspaces/sessions/projects/assets/jobs/render_results/ledger; authenticated CRUD/render/review/media routes.
-5. UI: public/auth, Overview, Create, Projects, Editor, Review, Calendar.
-6. Background: durable poller, atomic queue claim, heartbeat, expiry recovery, independent render.
-7. Security: owner authorization, validation, origins, private files, nonnegative wallet.
-8. Tests: domain invariants, browser complete path, actual media probe, viewport/keyboard checks.
-9. Gate: all checks and real output pass; stale/failed output cannot be presented as current.
-10. Limits: single-machine storage, owner-only tenancy; public deployment gate remains closed.
+Reuse the existing tested password/session design under the brief's existing-auth exception. Introduce workspace memberships and owner/admin/editor/viewer authorization in FastAPI; do not add a second authentication vendor. OAuth remains unavailable until configured and verified. Existing SQLite identities and media are development data, not automatically migrated production accounts. Never mix a PostgreSQL session with SQLite resources.
 
-### Phase 2 — AI-assisted creation and reuse
+Keep the root Next.js app during migration to avoid unnecessary moves of working code. The pnpm workspace contains independently usable video-engine and generated shared-types packages; the uv workspace contains services/api and services/workers. Infrastructure lives in infrastructure/docker and docker-compose.yml. Do not create empty packages to mimic a directory diagram. Once PostgreSQL project/assets/rendering pass parity gates, retire the SQLite API and worker in a separate reviewed change with an explicit data migration. Until then, choose the legacy development studio or the foundation service at process startup; no silent fallback between databases.
 
-1. Objective: prompt/script/story/explainer/marketing/character inputs produce editable narrated media through real providers.
-2. Prerequisites: Phase 1; authorized provider credentials and billing access.
-3. Modules: server/providers, worker/generate, character/preset services and UI, provider tests.
-4. Database/API: character/preset records, generation jobs, usage events and edit proposals.
-5. UI: creation controls, character references, saved styles, actionable capability errors.
-6. Background: moderate, script, synthesize, transcribe captions, generate images, compose/render.
-7. Security: server-only secrets, provider output schemas, content rights, synthetic-voice disclosure.
-8. Tests: provider fixture contract/error tests plus real configured script/speech/image calls.
-9. Gate: real authorized runs validate all outputs, accurate narration/cues, original script preservation, failure refunds.
-10. Limits: credentials unavailable in this session; no claim of verified live AI.
+Preferred providers: OpenAI structured planning/editing, Whisper-compatible timed transcription, ElevenLabs speech, configurable original images, optional premium video. All are adapters with validated inputs/outputs, timeouts, classified retries, normalized failures, usage/cost metadata and replaceable credentials. Existing OpenAI speech remains a legacy implementation, not fulfillment of the ElevenLabs requirement. No generated executable code or arbitrary FFmpeg arguments.
 
-### Phase 3 — Recurring automation
+## Mandatory phases and acceptance gates
 
-1. Objective: durable review-first manual/scheduled pipelines with budgets and history.
-2. Prerequisites: Phases 1–2 provider contract; reliable worker clock.
-3. Modules: server/pipelines, worker scheduler, pipeline form/history/limits UI.
-4. Database/API: pipeline config/next-run/attempt/budget records and trigger keys; create/pause/resume/run/edit/duplicate/delete.
-5. UI: paused setup, explicit activation, measured runs/spend, errors and history.
-6. Background: atomic scheduled trigger and overlap prevention; outbox for future upload/source events.
-7. Security: workspace scope, subscription/quota, max spending, explicit review end state.
-8. Tests: duplicate scheduled trigger, concurrent scheduler, exhaustion, restart, provider error, pause/resume.
-9. Gate: real scheduled generation once per due slot, no unauthorized publication, budget enforced across workers.
-10. Limits: lifetime caps/current interval semantics; source events and notifications pending.
+Advance in order. For every phase read these three specifications, reuse existing modules, implement data/backend then real UI states, integrate, run relevant checks, review security, and update verified evidence/blockers here. External blockers permit independently testable work only; specifications, fixtures and legacy features do not pass a new-stack gate.
 
-### Phase 4 — Advanced creative formats
+| Phase                        | Implementation and data/API scope                                                                                                                                        | UI and asynchronous work                                                                                                                                | Security, verification and completion gate                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0: inspection/specifications | Inspect existing code; settle architecture, compatibility, dependency and credential decisions in these three docs.                                                      | Inventory existing real behavior and unavailable features.                                                                                              | Gate: internally consistent complete specifications, reusable code identified, migration boundaries and external requirements recorded.                                                             |
+| 1: foundation                | FastAPI /api/v1 auth/workspaces/settings; PostgreSQL users, memberships, sessions, trial ledger and audit; Alembic; Redis; pnpm/uv workspaces.                           | Existing visual shell/theme; authenticated foundation dashboard; validated auth/settings; real Celery maintenance; Docker and CI; error boundaries.     | Gate: signup, logout/login, authenticated dashboard and protected API work; tenant and role isolation; migrations up/down and relevant tests pass with PostgreSQL/Redis. Production remains closed. |
+| 2: projects/assets           | PostgreSQL projects/versions/timelines/scenes/assets/licenses; optimistic save revision; private S3 presigned upload/finalize/download; quotas and deletion.             | Project CRUD, timeline configuration/autosave, asset library with honest upload/probe state. Workers validate uploaded media.                           | Gate: authorized image/video upload, create/save/update, refresh restores data; cross-workspace and invalid file requests rejected. Prerequisite phase 1.                                           |
+| 3: rendering                 | Reuse independent Remotion engine and FFmpeg/FFprobe; PostgreSQL generation_jobs/events; immutable timeline snapshots; Redis/Celery dispatch to separate render workers. | Preview, progress, thumbnails, captions, audio and reusable layouts; retries/cancellation. Target 1080x1920@30 plus cheaper previews; all three ratios. | Gate: deterministic images/video/audio/caption timeline produces playable H.264/AAC MP4 with validated timing/dimensions/audio and preview parity. No paid AI needed. Prerequisite phase 2.         |
+| 4: AI generation             | Provider adapters, strict plans/edit operations, generation orchestration, usage/cost records. Supplied script preserved.                                                | Prompt/script flows; script, ElevenLabs narration, alignment, images and measured progress; bounded jobs.                                               | Gate: real configured topic-to-synchronized-video and unchanged-script-to-video; credentials absent means unavailable, not a simulated success. Prerequisite phase 3.                               |
+| 5: characters/formats        | Characters/references/voice profiles/brand presets/templates; dialogue, expressions, consistency and history.                                                            | Character Studio; original stories, gameplay, education, product formats; per-speaker tracks and scene regeneration.                                    | Gate: approved reusable character voice/appearance produces a completed story; every shipped format has a tested renderer. License/reference consent required. Prerequisite phase 4.                |
+| 6: editing/clipping          | Long-source ingestion/transcripts; silence/highlight candidates/timestamp trims/reframe/caption alignment; validated edit operations.                                    | Multiple coherent editable vertical clips; editor, undo/redo, natural-language proposals and revised export.                                            | Gate: real long input yields multiple coherent clips with valid source times; edits persist/render. SSRF, parser sandbox and resource bounds tested. Prerequisite phase 5.                          |
+| 7: autopilot                 | Pipeline definitions/runs, triggers, persistent styles, quotas, budgets, durable schedule idempotency and notifications.                                                 | Builder, run history, pause/resume, review queue; schedules enqueue generation, never bypass approval.                                                  | Gate: real completed reviewed run, editable future runs and pause/resume; duplicate triggers neither double charge nor publish. Prerequisite phase 6.                                               |
+| 8: commercial billing        | Stripe Checkout/portal/webhooks/reconciliation; plans/entitlements/subscriptions, transactional reserves/refunds/expiry/allowances.                                      | Pricing, actual balances/usage/ledger, upgrade/downgrade/payment failure and cancellation.                                                              | Gate: actual test-mode purchase provisions entitlements; concurrency and replay/out-of-order tests preserve accounting. No redirect grants. Prerequisite phase 7.                                   |
+| 9: publishing                | Official OAuth connected accounts/destinations, approved revision-bound jobs/schedules, encrypted credentials, platform validation.                                      | Calendar, authorization/consent, status, safe retry, notifications and manual download fallback.                                                        | Gate: actual authorized publishing on configured/approved platforms; unknown outcomes reconciled before retry. Unapproved integrations explicitly unavailable. Prerequisite phase 8.                |
+| 10: analytics                | Authorized metric ingestion, actual usage/cost/history, feedback and creator preferences.                                                                                | Real account/content/pipeline analytics, date comparisons and evidence-based recommendations. Recharts only for measured data.                          | Gate: metrics disclose source/time/unit, recommendations follow authorized observations, no invented engagement. Prerequisite phase 9.                                                              |
+| 11: production               | Security/abuse controls, private storage retention, deletion, backup/restore, monitoring, recovery/reconciliation and deployment.                                        | Actionable errors, support and privacy lifecycle; comprehensive acceptance workflow.                                                                    | Gate: realistic load/benchmarks, restore/recovery drills, subscriptions, actual media validation and production credentials/infrastructure all verified. Prerequisite all earlier applicable gates. |
 
-1. Objective: full template registry, character dialogue/animation/continuity, gameplay looping, quiz/marketing variations.
-2. Prerequisites: verified Phase 2 assets and composition parity.
-3. Modules: future lib/templates and character continuity, video tracks/effects, editor controls.
-4. Database/API: versioned templates/characters/groups/series, operation history and regeneration references.
-5. UI: template chooser, expression/reference approval, per-speaker voice, variation review, caption/animation controls.
-6. Background: scene-local regeneration, reference conditioning, multiple voice alignment, loop/crop assembly.
-7. Security: license checks and approved references; no unauthorized characters or imitation.
-8. Tests: all ten templates render; voice/cue alignment, continuity, scene-local regeneration and undo.
-9. Gate: user can produce and edit every named format with render parity.
-10. Limits: partially specified boundaries exist; registry, animation and multi-speaker implementation pending.
+## Media acceptance and external dependencies
 
-### Phase 5 — Source intelligence
+Before a job completes validate nonempty media, decodability, codec/dimensions/duration, safe caption regions and timestamps, narration alignment, expected audio and levels, unintended black frames, missing media, duplicate references, gaps and unsupported operations. Reject malformed provider plans, repeated/broken structure, excessive duration and unsupported claims; source-grounded content requires human fact review. Never label claims verified automatically.
 
-1. Objective: authorized URLs/documents and long videos become grounded explanations or quality highlight candidates.
-2. Prerequisites: Phases 1–2, source rights, isolated parsers and bounded network access.
-3. Modules: future source extraction/fact review/highlight analysis; current FFmpeg/transcription excerpts.
-4. Database/API: source documents/transcripts/citations/segments/speaker candidates and processing status.
-5. UI: source review, transcript corrections, candidate boundaries/ranking reasons, crop controls.
-6. Background: audio/scene/silence detection, diarization when feasible, coherent topic ranking, reframing, renders.
-7. Security: DNS-pinned SSRF prevention, redirects and response limits, sandboxed documents/media, provenance.
-8. Tests: private IP/redirect rejection, malicious/large documents, exact clip boundaries, source citations, source audio preserved.
-9. Gate: accurate authorized source ingestion and candidates; no fabricated performance prediction.
-10. Limits: current transcript-based duration-fit excerpts are implemented but live transcription unverified; advanced analysis and safe URL/PDF extraction pending.
+External gates: OpenAI and ElevenLabs credentials/billing; private S3/R2 bucket and scoped credentials; Stripe test account/prices/webhook endpoint and live configuration later; HTTPS deployment, official social developer apps/scopes/app review; transactional email/OAuth providers if enabled; monitoring/support ownership and legal/privacy approval. Secrets stay server-side and untracked. No live AI, payment or publishing verification has occurred.
 
-### Phase 6 — Commercial billing and accounting
+## Continuation progress
 
-1. Objective: real subscription lifecycle, checkout/portal, allowances, categorized usage and quotas.
-2. Prerequisites: Stripe account, monthly price IDs, webhook secret and accessible endpoint.
-3. Modules: server/billing, webhook route, billing/history UI, reconciliation tests and operational job.
-4. Database/API: Stripe customer/subscription IDs, webhook receipts, invoice ledger keys, plan state.
-5. UI: configured plan actions, actual balance/history, payment status, portal upgrade/downgrade.
-6. Background: webhook retry/reconciliation, future alerting and measured premium settlement.
-7. Security: signature verification, price allowlist, owner identity, unique customer/active subscription.
-8. Tests: signed fixtures, duplicate/out-of-order invoices, concurrent checkout, payment failure, cancel/upgrade/downgrade and real test-mode purchase.
-9. Gate: no allowance on redirects or duplicate webhook; correct live reconciliation and quotas.
-10. Limits: code boundary present; Stripe credentials/tests unavailable. Premium video, storage pricing and support reconciliation pending.
+- Phase 0: repository and continuation inspected; required architecture and all twelve gates reconciled here and in UI.md/CODING.md.
+- Phase 1 implemented slice: uv/pnpm workspaces, FastAPI /api/v1, Alembic PostgreSQL identity/membership/session/credit/audit schema, server role checks, hashed sessions, transactional one-time trial, aggregate and per-email Redis limits, validated auth/settings UI, persisted light/dark theme, error boundary, generated API types, explicit backend cutover, Celery maintenance queues, separate Dockerfiles/Compose and CI jobs.
+- Verified locally: Python 3.12.13, FastAPI 0.143.1, SQLAlchemy 2.0.54, Pydantic 2.14.1 and Celery 5.6.3 install under uv 0.13.1. PostgreSQL 18 fresh migration, downgrade and re-upgrade succeed in isolated schemas. Thirteen Python tests pass with actual PostgreSQL and an explicit fakeredis test double; the real-Redis broker test is skipped locally. Ruff, format checks and strict mypy pass.
+- Frontend verification: TypeScript, ESLint, all 17 existing domain/provider/billing tests, 3 Vitest/RTL/proxy regressions and the production build pass. The foundation Playwright signup/profile/workspace/theme/logout/login workflow passes with real PostgreSQL and a test-only Redis transport; automated WCAG checks pass in light mode, and responsive checks settle correctly at 320/768/1440px. No fixture provider is enabled in application code. Runtime pnpm audit reports zero vulnerabilities.
+- Legacy regression after video-engine extraction: all three production browser workflows pass, including actual uploaded PNG/WAV media, MP4 rendering, approval, download and manual reminder. The new backend does not claim that rendering has been migrated.
+- Independent review fixes: enforce aggregate signup limits before scrypt, fail closed on Redis loss, cap the whole proxy request including stalled bodies, disable the unselected API in both directions, and render auth pages dynamically for runtime deployment selection. Docker web health now waits for actual Next.js readiness.
+- Phase 1 gate remains pending real Redis/Celery and Docker runtime verification. CI contains isolated PostgreSQL/Redis integration, existing studio rendering, and a complete Compose startup job; remote results are not yet observed. Do not advance phases based on test doubles.
+- PostgreSQL project/assets migration (phase 2), private S3 storage and subsequent commercial gates remain open; the legacy studio is not a substitute for these gates.
+- Local environment: Node 24, pnpm 10.33, Python 3.14 and PostgreSQL 18 binaries/service exist. Docker executable and a Redis listener were not found. Do not change or reuse the user's existing PostgreSQL cluster without authorization; use an isolated test database/cluster.
+- Next task: observe the real-service CI and container results, resolve failures, then start phase 2 PostgreSQL project/assets and private object storage. Missing local Docker/Redis is a precise runtime limitation; do not modify the existing user PostgreSQL service. Record remote evidence before declaring phase 1 complete.
 
-### Phase 7 — Official publishing and performance
+## Previous development release evidence
 
-1. Objective: OAuth account connection → approved schedule → verified platform post and analytics.
-2. Prerequisites: phases 1/3/6, HTTPS storage, platform developer apps, scopes/app review.
-3. Modules: future publishing adapters, OAuth/state/encryption, scheduler/outbox/status reconciliation.
-4. Database/API: encrypted account tokens/scopes, immutable approved publication records, submission IDs/URLs/errors/retry eligibility.
-5. UI: Connect/Reconnect/Disconnect, destination privacy/account preview, consent, scheduled posts, actual outcomes/analytics.
-6. Background: official upload APIs, token refresh, result poll/webhook, safe retries and notifications.
-7. Security: one-time state/PKCE where supported, least privilege, encrypted refresh tokens, revision/destination approval, no duplicate upload after unknown outcome.
-8. Tests: deterministic test-only adapters, revoked/expired scopes, provider validation, ambiguous upload timeout, DST schedules, verified authorized post on each platform.
-9. Gate: YouTube/TikTok/Instagram live tests and required reviews pass; never mark a submission published without provider evidence.
-10. Limits: no live connection or publishing implementation is claimed; MP4 download/manual calendar is the current fallback.
-
-### Phase 8 — Public launch and operations
-
-1. Objective: supported commercial service with security, privacy, reliability and recovery validated.
-2. Prerequisites: all applicable earlier gates; operator ownership of hosting/credentials/support.
-3. Modules: verification/recovery/deletion, memberships/roles, object storage, observability, backup/support tools.
-4. Database/API: membership/invitations, recovery tokens, audit/retention/deletion state, durable notifications.
-5. UI: complete onboarding, account lifecycle, teams, privacy/legal, support and accessible mobile review.
-6. Background: email outbox, retention/cleanup, backups, reconciliations, alerts and storage lifecycle.
-7. Security: parser sandbox, CSP review, upload storage quotas, session revocation/abuse controls, redacted logs.
-8. Tests: restore drill, load/queue isolation, failover, accessibility, end-to-end integration suite, threat review.
-9. Gate: production checklist in CODING.md satisfied, rollback/restore tested, no critical/high runtime vulnerabilities, actual operational owner acceptance.
-10. Limits: this phase is not complete; do not market this development build as production-ready.
-
-## Current progress
+The following evidence applies only to the original Node/SQLite development studio. Features below remain useful reference implementations, not completion of the newly required PostgreSQL phases.
 
 - Repository inspected: initial commit contained only README.md.
 - Verified on October 14, 2026 with Node 24 on Windows: type generation/type checking, lint, production build, and 17 domain/provider/Stripe contract tests pass. A deliberately inverted quota guard was caught by the tests and restored.
