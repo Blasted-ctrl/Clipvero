@@ -86,6 +86,7 @@ test("PostgreSQL projects preserve scripts, autosave revisions and delete privat
     .getByLabel("Password", { exact: true })
     .fill("project creator secure password");
   await page.getByRole("button", { name: "Create your account" }).click();
+  await expect(page).toHaveURL(/\/overview$/);
   const script = "My exact original words. These scenes stay mine.";
   await page.goto("/features/ai-video-generator");
   await page.waitForLoadState("networkidle");

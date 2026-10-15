@@ -22,6 +22,7 @@ import type {
   Project,
 } from "@/lib/model";
 import type { Identity } from "@/server/auth";
+import { foundationApi } from "@/lib/foundation-api";
 
 export type AppState = {
   me: Identity & { role?: "owner" | "admin" | "editor" | "viewer" };
@@ -52,23 +53,13 @@ export async function api<T = unknown>(
   method = "GET",
   data?: unknown,
 ): Promise<T> {
-  const base =
-    document.documentElement.dataset.backend === "fastapi" ? "/api/v1" : "/api";
   const encoded =
     data == null
       ? undefined
       : data instanceof FormData
         ? data
         : JSON.stringify(data);
-  if (
-    base === "/api/v1" &&
-    typeof encoded === "string" &&
-    new TextEncoder().encode(encoded).length > 1024 * 1024
-  )
-    throw new Error(
-      "This edit exceeds the 1 MB save limit. Reduce scene text or captions before saving.",
-    );
-  const response = await fetch(`${base}/${path}`, {
+  const response = await fetch(`/api/${path}`, {
     method,
     credentials: "same-origin",
     headers: {
@@ -114,10 +105,11 @@ export function Providers({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   );
 }
-export function useApp() {
+export function useApp(foundation = false) {
   return useQuery<AppState>({
-    queryKey: ["state"],
-    queryFn: () => api<AppState>("state"),
+    queryKey: foundation ? ["foundation", "state"] : ["state"],
+    queryFn: () =>
+      foundation ? foundationApi<AppState>("state") : api<AppState>("state"),
     refetchInterval: 5000,
   });
 }

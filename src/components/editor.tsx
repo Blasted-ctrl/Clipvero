@@ -33,6 +33,7 @@ import {
   type Timeline,
 } from "@/lib/model";
 import { createEditorStore } from "@/lib/editor-store";
+import { foundationApi } from "@/lib/foundation-api";
 import {
   VideoComposition,
   type MediaMap,
@@ -50,10 +51,11 @@ export function Editor({
   id: string;
   foundation?: boolean;
 }) {
-  const workspace = useApp();
+  const request = foundation ? foundationApi : api;
+  const workspace = useApp(foundation);
   const query = useQuery({
     queryKey: ["project", id],
-    queryFn: () => api<Project>(`projects/${id}`),
+    queryFn: () => request<Project>(`projects/${id}`),
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -123,7 +125,8 @@ function LoadedEditor({
   const [store] = useState(() => createEditorStore(initial.timeline)),
     state = useStore(store),
     { timeline, change, undo, redo } = state;
-  const { data } = useApp(),
+  const projectApi = foundation ? foundationApi : api;
+  const { data } = useApp(foundation),
     { act, busy } = useAction(),
     notify = useNotify(),
     client = useQueryClient(),
@@ -182,7 +185,7 @@ function LoadedEditor({
     if (value === savedRef.current) return true;
     setSaving(true);
     setSaveError("");
-    const request = api<Project>(`projects/${initial.id}`, "PATCH", {
+    const request = projectApi<Project>(`projects/${initial.id}`, "PATCH", {
       ...snapshot,
       revision: revision.current,
     })
@@ -204,7 +207,7 @@ function LoadedEditor({
       });
     pending.current = request;
     return request;
-  }, [store, initial.id, client]);
+  }, [store, initial.id, client, projectApi]);
   useEffect(() => {
     if (!dirty || saveError) return;
     const timer = setTimeout(() => {
