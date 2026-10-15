@@ -19,7 +19,7 @@ test-results/
 .envrc
 .direnv/
 .cache/
-data/
+/data/
 .render/
 *.db
 *.db-shm

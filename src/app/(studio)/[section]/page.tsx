@@ -26,10 +26,16 @@ export default async function Page({
     if (
       section !== "overview" &&
       section !== "settings" &&
-      section !== "projects"
+      section !== "projects" &&
+      section !== "create"
     )
       notFound();
-    return <FoundationPage section={section} />;
+    return (
+      <FoundationPage
+        section={section === "create" ? "projects" : section}
+        creating={section === "create"}
+      />
+    );
   }
   if (!sections.includes(section)) notFound();
   return <StudioPage section={section} />;

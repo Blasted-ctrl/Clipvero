@@ -18,6 +18,12 @@ Projects shows only persisted workspace records, with a real empty/error/loading
 
 ## Existing studio design system and workflow specification
 
+## Public site polish
+
+The public marketing site uses an editorial production workspace direction: warm charcoal (#101113), off-white (#F0EFEB), muted gray (#A6A8AE), quiet violet selection states and ivory primary actions with dark labels. Geist remains locally hosted. Use a steady full-width navigation bar, a 1280px content grid, clear section dividers, restrained 6–10px corners and readable control labels. The hero pairs a real brief composer with an original illustrated scene workflow. The illustration is identified as a project study; it is not a fabricated customer project or a live editor.
+
+Describe the actual work: scripts, recordings, scene editing, saved styles and review. Avoid generic AI-studio slogans, decorative badge stacks, glowing grids, shimmering text, rotating borders and pointer-following spotlights. Typography and useful product detail carry the hierarchy. Format studies remain playable, explicitly illustrative media; their horizontal strip scrolls on demand rather than moving continuously. Product previews use one quiet label and a concise sample-content note. Preserve keyboard navigation, contrast, reduced motion, form drafts, clear errors and mobile touch targets. Shared styling applies across home, feature pages, Autopilot, pricing, FAQ and contact.
+
 AGENTS.md defines product acceptance and progress. This file defines the intended interface and labels later surfaces explicitly. Never present pending functionality as an active control.
 
 ## Visual contract

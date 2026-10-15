@@ -12,6 +12,10 @@ import { scriptTimeline, type Project } from "@/lib/model";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { toast } from "sonner";
+import {
+  clearCreationDraft,
+  readCreationDraft,
+} from "./marketing/lib/creation-draft";
 
 const formSchema = z.object({
   title: z.string().trim().min(1).max(120),
@@ -21,10 +25,16 @@ const formSchema = z.object({
 });
 type Input = z.infer<typeof formSchema>;
 
-export function FoundationProjects({ canEdit }: { canEdit: boolean }) {
+export function FoundationProjects({
+  canEdit,
+  creating = false,
+}: {
+  canEdit: boolean;
+  creating?: boolean;
+}) {
   const router = useRouter(),
     client = useQueryClient();
-  const [open, setOpen] = useState(false),
+  const [open, setOpen] = useState(creating && canEdit),
     [offset, setOffset] = useState(0),
     [failure, setFailure] = useState("");
   const [deleting, setDeleting] = useState<Project | null>(null),
@@ -33,6 +43,13 @@ export function FoundationProjects({ canEdit }: { canEdit: boolean }) {
     form: string;
     body: { title: string; timeline: Project["timeline"]; creationKey: string };
   } | null>(null);
+  const { data: draft } = useQuery({
+    queryKey: ["foundation", "creation-draft"],
+    queryFn: async () => readCreationDraft(),
+    enabled: creating && canEdit,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
   const {
     register,
     handleSubmit,
@@ -40,6 +57,14 @@ export function FoundationProjects({ canEdit }: { canEdit: boolean }) {
   } = useForm<Input>({
     resolver: zodResolver(formSchema),
     defaultValues: { title: "", script: "", duration: 30, aspect: "9:16" },
+    ...(draft?.source === "script" && {
+      values: {
+        title: "",
+        script: draft.content,
+        duration: 30,
+        aspect: "9:16" as const,
+      },
+    }),
   });
   const query = useQuery({
     queryKey: ["foundation", "projects", offset],
@@ -141,6 +166,19 @@ export function FoundationProjects({ canEdit }: { canEdit: boolean }) {
         open={open}
         onOpenChange={setOpen}
       >
+        {creating && (
+          <p className="notice">
+            This workspace supports script editing and preview. Idea generation,
+            uploads and exports are not available here yet. Your saved brief
+            stays in this browser until you create a project.
+          </p>
+        )}
+        {draft && draft.source !== "script" && draft.content && (
+          <details>
+            <summary>Your saved brief</summary>
+            <p>{draft.content}</p>
+          </details>
+        )}
         <form
           className="form-stack"
           onSubmit={(event) => {
@@ -169,6 +207,7 @@ export function FoundationProjects({ canEdit }: { canEdit: boolean }) {
                 await client.invalidateQueries({
                   queryKey: ["foundation", "projects"],
                 });
+                if (creating) clearCreationDraft();
                 router.push(`/editor/${project.id}`);
               } catch (error) {
                 setFailure(

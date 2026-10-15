@@ -5,6 +5,10 @@ test("PostgreSQL account, workspace settings, theme and session lifecycle", asyn
   page,
 }) => {
   const email = `foundation-${crypto.randomUUID()}@example.com`;
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    "Good ideas.Ready for the cut.",
+  );
   await page.goto("/overview");
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/signup");
@@ -17,6 +21,8 @@ test("PostgreSQL account, workspace settings, theme and session lifecycle", asyn
   await expect(
     page.getByRole("heading", { name: "Welcome, Foundation." }),
   ).toBeVisible();
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/overview$/);
   await expect(page.getByText("Video tools are being migrated.")).toBeVisible();
   const me = await page.request.get("/api/v1/auth/me");
   expect(me.ok()).toBeTruthy();
@@ -80,20 +86,23 @@ test("PostgreSQL projects preserve scripts, autosave revisions and delete privat
     .getByLabel("Password", { exact: true })
     .fill("project creator secure password");
   await page.getByRole("button", { name: "Create your account" }).click();
-  await page.getByRole("link", { name: "Projects", exact: true }).click();
-  await page.getByRole("button", { name: "New script project" }).click();
+  const script = "My exact original words. These scenes stay mine.";
+  await page.goto("/features/ai-video-generator");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("tab", { name: "Script", exact: true }).click();
+  await page.getByLabel("Your script", { exact: true }).fill(script);
+  await page.getByRole("button", { name: "Create video", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByLabel("Your script", { exact: true })).toHaveValue(
+    script,
+  );
   await page
     .getByLabel("Project name", { exact: true })
     .fill("Persisted original story");
   await page
-    .getByLabel("Your script", { exact: true })
-    .fill("My exact original words.");
-  await page
     .getByRole("button", { name: "Open in editor", exact: true })
     .click();
-  await expect(page.getByLabel("Caption text")).toHaveValue(
-    "My exact original words.",
-  );
+  await expect(page.getByLabel("Caption text")).toHaveValue(script);
   await expect(
     page.getByRole("button", { name: "Render video", exact: true }),
   ).toHaveCount(0);
@@ -109,9 +118,7 @@ test("PostgreSQL projects preserve scripts, autosave revisions and delete privat
   const response = await page.request.get(`/api/v1/projects/${id}/versions`);
   const history = await response.json();
   expect(history.length).toBeGreaterThan(1);
-  expect(history.at(-1).timeline.scenes[0].script).toBe(
-    "My exact original words.",
-  );
+  expect(history.at(-1).timeline.scenes[0].script).toBe(script);
   await page.getByRole("link", { name: "Projects", exact: true }).click();
   await page
     .getByRole("button", { name: "Delete Persisted original story" })

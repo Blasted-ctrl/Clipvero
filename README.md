@@ -9,7 +9,7 @@ There are currently two development paths. The existing local studio can edit an
 Install **Node.js 24** and **pnpm 10.33**, then run:
 
 ```sh
-git clone --branch feature/studio-foundation https://github.com/Blasted-ctrl/Clipvero.git
+git clone https://github.com/Blasted-ctrl/Clipvero.git
 cd Clipvero
 pnpm install --frozen-lockfile
 pnpm dev:all

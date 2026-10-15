@@ -4,6 +4,8 @@ Clipvero helps independent creators, educators, and small marketing teams turn t
 
 ## Repository rules
 
+- Work directly on `main`. Do not create feature or backup branches unless the user asks for them.
+
 - Keep product specifications here, visual specifications in UI.md, and engineering contracts in CODING.md. README.md is the requested quick-start guide. Create no other original planning Markdown files.
 - Never add AI or assistant co-author trailers to commits. Never commit credentials, .env files, runtime media, databases, build output, or test artifacts. Keep .env.example as an empty configuration template.
 - Every visible action must have a defined result. Do not invent projects, job progress, balances, publishing successes, or analytics. Provider fixtures belong in tests only.
@@ -124,6 +126,10 @@ External gates: OpenAI and ElevenLabs credentials/billing; private S3/R2 bucket 
 ## Previous development release evidence
 
 The following evidence applies only to the original Node/SQLite development studio. Features below remain useful reference implementations, not completion of the newly required PostgreSQL phases.
+
+- Public marketing polish: replaced the generic AI-studio hero with an editorial brief composer and original illustrated scene workflow; scoped warm charcoal/ivory styling, simpler navigation, calmer pricing/cards, shorter homepage, updated social image and explicit preview disclosures. Removed glow grids, text shimmer, rotating borders, pointer spotlights and the continuously moving poster strip. Runtime storage remains ignored; static marketing content now stays tracked.
+- Verified the polish against the production build: TypeScript, ESLint and all 41 domain/content tests pass. All 46 browser checks pass, including 43 public-site cases and the existing workspace/security/real-MP4 workflows. Automated WCAG checks pass on home/features/Autopilot/pricing; responsive checks pass at 320/375/768/1024/1440px. Independent code review reports no required findings. No paid AI, billing or publishing verification is implied.
+- Fresh Linux CI verification passed: https://github.com/Blasted-ctrl/Clipvero/actions/runs/38683563828 . Install, checks, build and all 46 browser tests are green. The first run exposed missing optional dependency records in the existing lockfile; regenerating it with the runner's npm version repaired the clean install. The final documentation-only update does not change the verified implementation.
 
 - Repository inspected: initial commit contained only README.md.
 - Verified on October 14, 2026 with Node 24 on Windows: type generation/type checking, lint, production build, and 17 domain/provider/Stripe contract tests pass. A deliberately inverted quota guard was caught by the tests and restored.

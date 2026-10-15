@@ -1,6 +1,6 @@
 node_modules
 .next
-data
+/data
 .render
 pnpm-lock.yaml
 uv.lock

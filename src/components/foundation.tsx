@@ -247,8 +247,10 @@ function NameForm({
 
 export function FoundationPage({
   section,
+  creating = false,
 }: {
   section: "overview" | "settings" | "projects";
+  creating?: boolean;
 }) {
   const { data, error, isPending, refetch } = useIdentity();
   if (isPending) return <p role="status">Loading your workspace…</p>;
@@ -261,7 +263,12 @@ export function FoundationPage({
       </div>
     );
   if (section === "projects")
-    return <FoundationProjects canEdit={data.role !== "viewer"} />;
+    return (
+      <FoundationProjects
+        canEdit={data.role !== "viewer"}
+        creating={creating}
+      />
+    );
   return (
     <div className="foundation-content">
       <span className="eyebrow">YOUR WORKSPACE</span>
