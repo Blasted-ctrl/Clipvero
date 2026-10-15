@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { usesFastAPI } from "@/server/backend";
 import { Editor } from "@/components/editor";
 export default async function Page({
@@ -6,7 +5,6 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  if (usesFastAPI()) notFound();
   const { id } = await params;
-  return <Editor id={id} />;
+  return <Editor id={id} foundation={usesFastAPI()} />;
 }

@@ -12,9 +12,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 
+from clipvero_api.projects import router as project_router
 from clipvero_api.routes import router
 from clipvero_api.schemas import ErrorResponse
 from clipvero_api.security import APIError
+from clipvero_api.storage import router as storage_router
 
 logger = logging.getLogger("clipvero.api")
 if not logger.handlers:
@@ -48,8 +50,8 @@ def create_app() -> FastAPI:
         started = time.monotonic()
         response: Response
         length = request.headers.get("content-length", "0")
-        if not length.isdigit() or int(length) > 65536:
-            response = error(request, 413, "BODY_TOO_LARGE", "Request exceeds 64 KB.")
+        if not length.isdigit() or int(length) > 1024 * 1024:
+            response = error(request, 413, "BODY_TOO_LARGE", "Request exceeds 1 MB.")
         elif request.method in {"POST", "PATCH", "PUT"} and "content-length" not in request.headers:
             response = error(request, 411, "LENGTH_REQUIRED", "Content-Length is required.")
         else:
@@ -99,6 +101,8 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(router)
+    app.include_router(project_router)
+    app.include_router(storage_router)
     return app
 
 

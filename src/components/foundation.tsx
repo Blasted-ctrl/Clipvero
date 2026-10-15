@@ -14,10 +14,12 @@ import {
   Menu,
   X,
   SunMoon,
+  FolderClosed,
 } from "lucide-react";
 import { foundationApi, type FoundationIdentity } from "@/lib/foundation-api";
 import { Logo } from "./shell";
 import { Button } from "./ui/button";
+import { FoundationProjects } from "./foundation-projects";
 
 function useIdentity() {
   return useQuery({
@@ -77,6 +79,7 @@ export function FoundationShell({ children }: { children: ReactNode }) {
         <nav aria-label="Main navigation">
           {[
             { href: "/overview", label: "Overview", icon: LayoutDashboard },
+            { href: "/projects", label: "Projects", icon: FolderClosed },
             { href: "/settings", label: "Settings", icon: Settings2 },
           ].map((item) => (
             <Link
@@ -147,9 +150,22 @@ export function FoundationShell({ children }: { children: ReactNode }) {
           >
             {mobile ? <X /> : <Menu />}
           </Button>
-          <span>{path === "/settings" ? "Settings" : "Overview"}</span>
+          <span>
+            {path.startsWith("/editor")
+              ? "Editor"
+              : path === "/projects"
+                ? "Projects"
+                : path === "/settings"
+                  ? "Settings"
+                  : "Overview"}
+          </span>
         </header>
-        <main id="main" className="page-content">
+        <main
+          id="main"
+          className={
+            path.startsWith("/editor") ? "editor-main" : "page-content"
+          }
+        >
           {children}
         </main>
       </div>
@@ -232,7 +248,7 @@ function NameForm({
 export function FoundationPage({
   section,
 }: {
-  section: "overview" | "settings";
+  section: "overview" | "settings" | "projects";
 }) {
   const { data, error, isPending, refetch } = useIdentity();
   if (isPending) return <p role="status">Loading your workspace…</p>;
@@ -244,6 +260,8 @@ export function FoundationPage({
         <Button onClick={() => void refetch()}>Try again</Button>
       </div>
     );
+  if (section === "projects")
+    return <FoundationProjects canEdit={data.role !== "viewer"} />;
   return (
     <div className="foundation-content">
       <span className="eyebrow">YOUR WORKSPACE</span>
@@ -274,9 +292,9 @@ export function FoundationPage({
           <div className="foundation-notice">
             <h2>Video tools are being migrated.</h2>
             <p>
-              Projects, uploads and rendering are not available in this
-              workspace yet. The existing development studio uses a separate
-              local data store.
+              Script projects, timeline editing and previews are now available.
+              Private uploads and MP4 exports are still being connected.
+              Projects from the development studio will not appear here yet.
             </p>
             <Button asChild>
               <Link href="/settings">Workspace settings</Link>

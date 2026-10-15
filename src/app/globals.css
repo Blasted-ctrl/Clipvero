@@ -3974,3 +3974,50 @@ code {
     display: inline-flex;
   }
 }
+
+.foundation-project-list {
+  display: grid;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+.foundation-project-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border);
+}
+.foundation-project-list h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.foundation-project-list p {
+  margin: 0;
+}
+.foundation-project-list .button-row {
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .foundation-project-list article {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.foundation-shell .editor-main {
+  --bg: #09090b;
+  --surface: #111115;
+  --surface-2: #18181d;
+  --interactive: #22222a;
+  --text: #f5f5f7;
+  --secondary: #a1a1aa;
+  --muted: #85858f;
+  --accent: #8b5cf6;
+  --accent-hover: #a78bfa;
+  --border: #29292f;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}

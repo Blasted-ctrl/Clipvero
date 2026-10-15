@@ -2,7 +2,7 @@
 
 ## Foundation migration surface
 
-Retain the existing dark violet studio identity, typography, spacing, focus treatment and responsive shell described below. Foundation mode is a real authenticated workspace dashboard backed by FastAPI. Its navigation exposes only working Overview and Settings destinations; explain once that project/media tools are being migrated. The legacy development studio remains a separate explicit process configuration. Do not present empty legacy projects as migrated Postgres data.
+Retain the existing dark violet studio identity, typography, spacing, focus treatment and responsive shell described below. Foundation mode is a real authenticated workspace dashboard backed by FastAPI. Its navigation exposes working Overview, Projects and Settings destinations; explain once that uploads and exports are being migrated. The legacy development studio remains a separate explicit process configuration. Do not present empty legacy projects as migrated Postgres data.
 
 Registration/login preserve the existing compact labeled form, with React Hook Form and Zod field validation, disabled submit while pending, accessible field errors and server failure message. Successful auth reaches Overview. Logout revokes the actual session and clears cached state. No demo identity or fabricated activity. Session expiry returns to login; an unreachable API displays an actionable retry state, not a login redirect.
 
@@ -11,6 +11,10 @@ Overview shows the actual signed-in name, workspace name, membership role and cr
 Loading skeletons describe the pending resource; empty states explain the next available action; errors provide retry without erasing input. Root and studio error boundaries permit recovery and never expose internal stack traces. API errors have a human message plus request ID for support. Test desktop and 320px layouts, protected-route redirect, complete signup/logout/login/settings, tenant isolation, keyboard/focus, contrast and actual persistence.
 
 Later phases extend the same visual system: phase 2 project/assets/autosave states; phase 3 measured render progress and preview/export parity; phase 4 honest provider configuration and synchronized generation; phase 5 character/voice/reference approvals and working format previews; phase 6 editable coherent clip candidates and undoable proposals; phase 7 budgets/schedules/history/review; phase 8 real reconciled billing; phase 9 approved destinations and explicit consent; phase 10 source-labeled real metrics; phase 11 privacy/deletion/recovery/support. Recharts has no data until measured metrics exist; dnd-kit must also support keyboard reordering. Do not ship nonfunctional buttons or claim unconfigured integrations work.
+
+## PostgreSQL project migration
+
+Projects shows only persisted workspace records, with a real empty/error/loading state, paginated rows, editable titles and recoverable removal confirmation. New script project uses one compact validated form: name, original script, duration and ratio. Cache the creation intent for a safe retry after a lost response. Preserve supplied words and scene breaks. Open the existing shared editor with autosave, undo/redo, scene/caption/timing/aspect controls and Remotion preview. Render and AI-proposal controls stay hidden until migrated services exist. The editing canvas keeps its dark palette for readable media controls while the surrounding shell follows the selected theme. Viewers receive playback without mutation controls or autosave. Explicitly explain that private uploads/exports are unavailable; never route users to an unimplemented asset page.
 
 ## Existing studio design system and workflow specification
 

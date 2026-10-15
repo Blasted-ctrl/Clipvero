@@ -48,9 +48,9 @@ async function proxy(
           const next = await reader.read();
           if (next.done) break;
           size += next.value.length;
-          if (size > 65536) {
+          if (size > 1024 * 1024) {
             await reader.cancel();
-            return fail(413, "BODY_TOO_LARGE", "Request exceeds 64 KB.");
+            return fail(413, "BODY_TOO_LARGE", "Request exceeds 1 MB.");
           }
           chunks.push(next.value);
         }

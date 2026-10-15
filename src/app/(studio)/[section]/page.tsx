@@ -23,7 +23,12 @@ export default async function Page({
 }) {
   const { section } = await params;
   if (usesFastAPI()) {
-    if (section !== "overview" && section !== "settings") notFound();
+    if (
+      section !== "overview" &&
+      section !== "settings" &&
+      section !== "projects"
+    )
+      notFound();
     return <FoundationPage section={section} />;
   }
   if (!sections.includes(section)) notFound();

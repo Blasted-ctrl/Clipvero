@@ -1,7 +1,7 @@
 from functools import lru_cache
 from urllib.parse import urlparse
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     session_secret: str = ""
     session_days: int = 14
     registration_limit: int = Field(default=100, ge=1, le=10000)
+    s3_endpoint_url: str = ""
+    s3_bucket: str = ""
+    s3_region: str = "auto"
+    s3_access_key_id: SecretStr = SecretStr("")
+    s3_secret_access_key: SecretStr = SecretStr("")
 
     @model_validator(mode="after")
     def validate_runtime(self) -> "Settings":
@@ -32,6 +37,20 @@ class Settings(BaseSettings):
         if self.environment == "production":
             if parsed.scheme != "https" or len(self.session_secret) < 32:
                 raise ValueError("Production requires HTTPS APP_URL and a strong SESSION_SECRET.")
+        if self.s3_endpoint_url:
+            storage = urlparse(self.s3_endpoint_url)
+            if (
+                storage.scheme not in {"http", "https"}
+                or not storage.netloc
+                or storage.username
+                or storage.password
+                or storage.query
+                or storage.fragment
+                or storage.path not in {"", "/"}
+            ):
+                raise ValueError("S3_ENDPOINT_URL must be an HTTP(S) origin without credentials.")
+            if self.environment == "production" and storage.scheme != "https":
+                raise ValueError("Production object storage requires HTTPS.")
         return self
 
 

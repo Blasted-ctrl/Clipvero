@@ -43,7 +43,14 @@ import { Dialog } from "./ui/dialog";
 import { Empty, Status, time } from "./common";
 import { ScheduleButton } from "./studio-pages";
 
-export function Editor({ id }: { id: string }) {
+export function Editor({
+  id,
+  foundation = false,
+}: {
+  id: string;
+  foundation?: boolean;
+}) {
+  const workspace = useApp();
   const query = useQuery({
     queryKey: ["project", id],
     queryFn: () => api<Project>(`projects/${id}`),
@@ -68,9 +75,50 @@ export function Editor({ id }: { id: string }) {
         }
       />
     );
-  return query.data ? <LoadedEditor key={id} initial={query.data} /> : null;
+  if (foundation && !workspace.data)
+    return (
+      <p role="status">
+        {workspace.error
+          ? "Workspace permissions could not load. Refresh to try again."
+          : "Loading workspace permissions…"}
+      </p>
+    );
+  if (foundation && workspace.data?.me.role === "viewer" && query.data)
+    return <ReadOnlyProject project={query.data} />;
+  return query.data ? (
+    <LoadedEditor key={id} initial={query.data} foundation={foundation} />
+  ) : null;
 }
-function LoadedEditor({ initial }: { initial: Project }) {
+function ReadOnlyProject({ project }: { project: Project }) {
+  return (
+    <div className="foundation-content">
+      <Button asChild variant="ghost">
+        <Link href="/projects">Back to projects</Link>
+      </Button>
+      <h1>{project.title}</h1>
+      <p className="muted">
+        View only · Revision {project.revision}. An editor can save changes.
+      </p>
+      <Player
+        component={VideoComposition}
+        inputProps={{ timeline: project.timeline, media: {} }}
+        durationInFrames={duration(project.timeline)}
+        fps={30}
+        compositionWidth={dimensions(project.timeline.aspect).width}
+        compositionHeight={dimensions(project.timeline.aspect).height}
+        controls
+        style={{ width: "100%", maxHeight: "65vh" }}
+      />
+    </div>
+  );
+}
+function LoadedEditor({
+  initial,
+  foundation,
+}: {
+  initial: Project;
+  foundation: boolean;
+}) {
   const router = useRouter();
   const [store] = useState(() => createEditorStore(initial.timeline)),
     state = useStore(store),
@@ -344,14 +392,16 @@ function LoadedEditor({ initial }: { initial: Project }) {
               View MP4
             </Button>
           )}
-          <Button
-            size="sm"
-            disabled={busy || Boolean(activeJob) || saving}
-            onClick={render}
-          >
-            <Film size={15} />
-            {activeJob ? "Rendering…" : "Render video"}
-          </Button>
+          {!foundation && (
+            <Button
+              size="sm"
+              disabled={busy || Boolean(activeJob) || saving}
+              onClick={render}
+            >
+              <Film size={15} />
+              {activeJob ? "Rendering…" : "Render video"}
+            </Button>
+          )}
         </div>
       </div>
       {saveError && (
@@ -388,6 +438,12 @@ function LoadedEditor({ initial }: { initial: Project }) {
           )}
           <small>This job uses revision {activeJob.revision}.</small>
         </div>
+      )}
+      {foundation && (
+        <p className="notice">
+          Changes save to your workspace. Private media and MP4 exports are not
+          available here yet.
+        </p>
       )}
       <div className="editor-workspace">
         <aside className="editor-left">
@@ -471,11 +527,13 @@ function LoadedEditor({ initial }: { initial: Project }) {
                     <span>{a.name}</span>
                   </button>
                 ))}
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/assets">
-                  Upload in Asset Library <ArrowUp size={14} />
-                </Link>
-              </Button>
+              {!foundation && (
+                <Button asChild variant="secondary" size="sm">
+                  <Link href="/assets">
+                    Upload in Asset Library <ArrowUp size={14} />
+                  </Link>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -867,43 +925,45 @@ function LoadedEditor({ initial }: { initial: Project }) {
             : "No background music · choose one in Style"}
         </div>
       </section>
-      <form
-        className="quick-edit"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          await act(async () => {
-            if (!(await save()))
-              throw new Error("Save your project before requesting an edit.");
-            const result = await api<{
-              timeline: Timeline;
-              operations: unknown[];
-              revision: number;
-            }>(`projects/${initial.id}/edit-plan`, "POST", { command });
-            setProposal(result);
-          });
-        }}
-      >
-        <Sparkles size={17} />
-        <input
-          aria-label="Edit instruction"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          maxLength={1000}
-          placeholder={
-            data?.capabilities.ai
-              ? "Describe a caption, duration, or music edit…"
-              : "Quick edit: ‘captions at bottom’ or ‘music at 10%’"
-          }
-        />
-        <Button
-          size="sm"
-          variant="secondary"
-          type="submit"
-          disabled={busy || !command.trim()}
+      {!foundation && (
+        <form
+          className="quick-edit"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await act(async () => {
+              if (!(await save()))
+                throw new Error("Save your project before requesting an edit.");
+              const result = await api<{
+                timeline: Timeline;
+                operations: unknown[];
+                revision: number;
+              }>(`projects/${initial.id}/edit-plan`, "POST", { command });
+              setProposal(result);
+            });
+          }}
         >
-          Propose edit <ChevronRight size={15} />
-        </Button>
-      </form>
+          <Sparkles size={17} />
+          <input
+            aria-label="Edit instruction"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            maxLength={1000}
+            placeholder={
+              data?.capabilities.ai
+                ? "Describe a caption, duration, or music edit…"
+                : "Quick edit: ‘captions at bottom’ or ‘music at 10%’"
+            }
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            type="submit"
+            disabled={busy || !command.trim()}
+          >
+            Propose edit <ChevronRight size={15} />
+          </Button>
+        </form>
+      )}
       <Dialog
         title="Review the proposed edit"
         description="Apply these validated timeline changes? You can undo them."

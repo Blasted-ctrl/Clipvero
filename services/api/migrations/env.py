@@ -1,4 +1,5 @@
 from alembic import context
+from clipvero_api import project_models  # noqa: F401
 from clipvero_api.db import engine
 from clipvero_api.models import Base
 from sqlalchemy.engine import Connection

@@ -46,7 +46,7 @@ test("creator can save, edit, render, review, and download a real video", async 
     .getByLabel("Caption text")
     .fill("A real render. An original story.");
   await expect(
-    page.getByRole("status").filter({ hasText: "Saved" }),
+    page.getByRole("status").filter({ hasText: /^Saved$/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.getByLabel("Caption text")).toHaveValue(
@@ -109,7 +109,7 @@ test("creator can save, edit, render, review, and download a real video", async 
     .selectOption({ label: "original-tone.wav" });
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page.getByRole("status").filter({ hasText: "Saved" }),
+    page.getByRole("status").filter({ hasText: /^Saved$/ }),
   ).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Caption text")).toHaveValue(
@@ -121,7 +121,7 @@ test("creator can save, edit, render, review, and download a real video", async 
   await page.getByRole("button", { name: "Apply edit" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page.getByRole("status").filter({ hasText: "Saved" }),
+    page.getByRole("status").filter({ hasText: /^Saved$/ }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/editor-desktop.png",

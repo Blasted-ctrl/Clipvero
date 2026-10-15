@@ -2,7 +2,7 @@
 
 Clipvero turns your own scripts and footage into editable short videos. It is under development and is **not ready for a public commercial launch**.
 
-There are currently two development paths. The existing local studio can edit and export videos. The new FastAPI foundation provides PostgreSQL accounts, workspace permissions and settings. Projects and media are being migrated; the two paths have separate accounts and data.
+There are currently two development paths. The existing local studio can edit and export videos. The new FastAPI workspace provides PostgreSQL accounts, permissions, script projects, saved timeline versions and settings. Private media and exports are being migrated; the two paths have separate accounts and data.
 
 ## Try the existing video studio
 
@@ -29,7 +29,7 @@ You need **Docker with Compose**. Copy `.env.example` to `.env` and set `POSTGRE
 docker compose up --build
 ```
 
-Open **http://localhost:3000**. Compose runs PostgreSQL, Redis, migrations, FastAPI, Celery maintenance, its scheduler and the website. It explicitly selects the FastAPI backend. Create an account, sign out and in, and update your profile and workspace name. The dashboard shows your actual membership and trial balance. Project creation and rendering are unavailable in this workspace until their migration passes testing.
+Open **http://localhost:3000**. Compose runs PostgreSQL, Redis, migrations, FastAPI, Celery maintenance, its scheduler and the website. It explicitly selects the FastAPI backend. Create an account, sign out and in, and update your profile and workspace name. The dashboard shows your actual membership and trial balance. Choose Projects to create a script project, edit scenes, preview and reopen saved changes. Private uploads and MP4 exports are unavailable here until their migration passes testing.
 
 PostgreSQL and Redis use named Docker volumes. Development ports bind to localhost: PostgreSQL 55432, Redis 56379, API 8000 and web 3000. Stop with `docker compose down`; keep the volumes to retain your data. Do not run both website paths on port 3000 at once. This Compose file is for local development.
 
@@ -42,6 +42,8 @@ uv run python -m uvicorn clipvero_api.main:app --reload --port 8000
 ```
 
 In separate terminals, run `uv run python -m celery -A clipvero_workers.app:app worker -Q maintenance --loglevel=INFO` and the website with `CLIPVERO_BACKEND=fastapi`. Run Celery in Linux containers; Windows supports API development but is not a production Celery host. API documentation is at **http://localhost:8000/docs**.
+
+The `.env.example` also lists private R2/S3 settings. They currently support an integration connection check and internal URL-signing boundary. Setting them does not enable uploads: asset ownership, quota reservation, content validation/finalization and cleanup are still being implemented. Keep the bucket private and add credentials only to your local `.env`.
 
 ## Checks
 
@@ -63,6 +65,6 @@ Install Chromium with `pnpm exec playwright install chromium`. With the local st
 
 The Next.js app remains in `src/` to preserve the working studio. `services/api` contains FastAPI and Alembic; `services/workers` contains Celery; `packages/video-engine` contains the shared Remotion composition and timeline schema; `packages/shared-types` contains generated API contracts. Dockerfiles live in `infrastructure/docker`.
 
-The required phase 0?11 roadmap and verified progress are in [AGENTS.md](AGENTS.md). [UI.md](UI.md) describes the interface and [CODING.md](CODING.md) the engineering rules. Later gates include private S3 storage, PostgreSQL video jobs, ElevenLabs, complete creative formats, source analysis, commercial billing, approved social integrations and production operations.
+The required roadmap for phases 0 through 11 and verified progress are in [AGENTS.md](AGENTS.md). [UI.md](UI.md) describes the interface and [CODING.md](CODING.md) the engineering rules. Later gates include private S3 storage, PostgreSQL video jobs, ElevenLabs, complete creative formats, source analysis, commercial billing, approved social integrations and production operations.
 
 `.env` files, keys, databases, media, local tools, caches, builds and test results stay out of Git. Use `.env.example` as a configuration guide. Production deployment remains gated on security, backup/restore, infrastructure and real integration tests.

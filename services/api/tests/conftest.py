@@ -7,7 +7,11 @@ import fakeredis
 import pytest
 from alembic import command
 from alembic.config import Config
-from clipvero_api import routes, security
+from clipvero_api import (
+    project_models,  # noqa: F401
+    routes,
+    security,
+)
 from clipvero_api.db import database
 from clipvero_api.main import create_app
 from clipvero_api.models import Base
@@ -90,7 +94,14 @@ def redis_client(monkeypatch: pytest.MonkeyPatch) -> Redis:
 @pytest.fixture
 def client(db: Session, redis_client: Redis) -> Iterator[TestClient]:
     app = create_app()
-    app.dependency_overrides[database] = lambda: db
+
+    def request_database():
+        try:
+            yield db
+        finally:
+            db.rollback()
+
+    app.dependency_overrides[database] = request_database
     with TestClient(
         app, base_url="http://localhost:3000", headers={"origin": "http://localhost:3000"}
     ) as client:

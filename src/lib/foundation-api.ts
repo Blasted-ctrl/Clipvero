@@ -8,12 +8,17 @@ export async function foundationApi<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
+  const encoded = body === undefined ? undefined : JSON.stringify(body);
+  if (encoded && new TextEncoder().encode(encoded).length > 1024 * 1024)
+    throw new Error(
+      "This edit exceeds the 1 MB save limit. Reduce scene text or captions before saving.",
+    );
   const response = await fetch(`/api/v1/${path}`, {
     method,
     credentials: "same-origin",
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: encoded,
   });
   const result = await response.json();
   if (!response.ok) {

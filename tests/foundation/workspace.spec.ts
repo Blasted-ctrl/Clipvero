@@ -67,3 +67,60 @@ test("PostgreSQL account, workspace settings, theme and session lifecycle", asyn
     page.getByRole("heading", { name: "Welcome, Updated." }),
   ).toBeVisible();
 });
+
+test("PostgreSQL projects preserve scripts, autosave revisions and delete privately", async ({
+  page,
+}) => {
+  await page.goto("/signup");
+  await page.getByLabel("Your name").fill("Project Creator");
+  await page
+    .getByLabel("Email address")
+    .fill(`project-${crypto.randomUUID()}@example.com`);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("project creator secure password");
+  await page.getByRole("button", { name: "Create your account" }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page.getByRole("button", { name: "New script project" }).click();
+  await page
+    .getByLabel("Project name", { exact: true })
+    .fill("Persisted original story");
+  await page
+    .getByLabel("Your script", { exact: true })
+    .fill("My exact original words.");
+  await page
+    .getByRole("button", { name: "Open in editor", exact: true })
+    .click();
+  await expect(page.getByLabel("Caption text")).toHaveValue(
+    "My exact original words.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Render video", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Caption text").fill("My saved caption.");
+  await expect(
+    page.getByRole("status").filter({ hasText: /^Saved$/ }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Caption text")).toHaveValue(
+    "My saved caption.",
+  );
+  const id = page.url().split("/").pop();
+  const response = await page.request.get(`/api/v1/projects/${id}/versions`);
+  const history = await response.json();
+  expect(history.length).toBeGreaterThan(1);
+  expect(history.at(-1).timeline.scenes[0].script).toBe(
+    "My exact original words.",
+  );
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Delete Persisted original story" })
+    .click();
+  await page
+    .getByRole("button", { name: "Remove project", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Persisted original story" }),
+  ).toHaveCount(0);
+  expect((await page.request.get(`/api/v1/projects/${id}`)).status()).toBe(404);
+});

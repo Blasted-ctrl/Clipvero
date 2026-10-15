@@ -24,7 +24,7 @@ import type {
 import type { Identity } from "@/server/auth";
 
 export type AppState = {
-  me: Identity;
+  me: Identity & { role?: "owner" | "admin" | "editor" | "viewer" };
   projects: Project[];
   jobs: Job[];
   assets: Asset[];
@@ -52,7 +52,23 @@ export async function api<T = unknown>(
   method = "GET",
   data?: unknown,
 ): Promise<T> {
-  const response = await fetch(`/api/${path}`, {
+  const base =
+    document.documentElement.dataset.backend === "fastapi" ? "/api/v1" : "/api";
+  const encoded =
+    data == null
+      ? undefined
+      : data instanceof FormData
+        ? data
+        : JSON.stringify(data);
+  if (
+    base === "/api/v1" &&
+    typeof encoded === "string" &&
+    new TextEncoder().encode(encoded).length > 1024 * 1024
+  )
+    throw new Error(
+      "This edit exceeds the 1 MB save limit. Reduce scene text or captions before saving.",
+    );
+  const response = await fetch(`${base}/${path}`, {
     method,
     credentials: "same-origin",
     headers: {
@@ -61,18 +77,17 @@ export async function api<T = unknown>(
         : { "Content-Type": "application/json" }),
       ...(method === "POST" ? { "Idempotency-Key": crypto.randomUUID() } : {}),
     },
-    body:
-      data == null
-        ? undefined
-        : data instanceof FormData
-          ? data
-          : JSON.stringify(data),
+    body: encoded,
   });
   const result = await response.json();
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith("auth/"))
       window.location.assign(new URL("/login", window.location.origin));
-    throw new Error(result.error || "The request failed.");
+    throw new Error(
+      typeof result.error === "string"
+        ? result.error
+        : result.error?.message || "The request failed.",
+    );
   }
   return result;
 }

@@ -126,7 +126,7 @@ def test_validation_origins_and_safe_errors(client: TestClient) -> None:
     assert (
         client.post("/api/v1/auth/register", json={**BODY, "password": "short"}).status_code == 422
     )
-    response = client.post("/api/v1/auth/register", content="x" * 65537)
+    response = client.post("/api/v1/auth/register", content="x" * (1024 * 1024 + 1))
     assert response.status_code == 413 and "password" not in response.text
 
 
