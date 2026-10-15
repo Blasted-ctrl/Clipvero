@@ -1,0 +1,34 @@
+[project]
+name = "clipvero-services"
+version = "0.2.0"
+requires-python = ">=3.12"
+dependencies = ["clipvero-api", "clipvero-workers"]
+
+[tool.uv.workspace]
+members = ["services/api", "services/workers"]
+
+[tool.uv.sources]
+clipvero-api = { workspace = true }
+clipvero-workers = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.14", "mypy>=1.18", "fakeredis[lua]>=2.32"]
+
+[tool.pytest.ini_options]
+testpaths = ["services/api/tests", "services/workers/tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["services/api/src", "services/workers/src"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*"]
+ignore_missing_imports = true

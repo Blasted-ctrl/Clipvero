@@ -1,4 +1,12 @@
 node_modules/
+.tools/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.pyc
+.local-services/
 .next/
 out/
 dist/
