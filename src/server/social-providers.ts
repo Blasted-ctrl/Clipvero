@@ -19,6 +19,13 @@ const tokenSchema = z.object({
   open_id: z.string().max(200).optional(),
   scope: z.string().max(2000).optional(),
 });
+const instagramTokenSchema = z.object({
+  access_token: z.string().min(1).max(10000),
+  user_id: z.union([z.string().min(1).max(200), z.number().int().safe()]),
+  permissions: z
+    .union([z.string().max(2000), z.array(z.string().min(1).max(200)).max(50)])
+    .optional(),
+});
 export type SocialCredentials = { accessToken: string; refreshToken?: string };
 export class ProviderError extends Error {
   constructor(
@@ -178,23 +185,27 @@ export async function exchangeSocialCode(
       redirect_uri: config.redirectUri,
       code,
     });
-    const short = z
-      .object({
-        data: z
-          .array(
-            z.object({
-              access_token: z.string().min(1),
-              user_id: z.union([z.string(), z.number()]),
-              permissions: z.string(),
-            }),
-          )
-          .min(1),
-      })
-      .parse(raw).data[0];
+    const parsed = z
+      .union([
+        instagramTokenSchema,
+        z
+          .object({ data: z.array(instagramTokenSchema).length(1) })
+          .transform((value) => value.data[0]),
+      ])
+      .safeParse(raw);
+    if (!parsed.success)
+      throw new AppError(
+        502,
+        "Instagram returned an incomplete authorization response. Start again from Automation.",
+      );
+    const short = parsed.data;
+    const permissions =
+      typeof short.permissions === "string"
+        ? short.permissions.split(",").map((value) => value.trim())
+        : short.permissions;
     if (
-      !short.permissions
-        .split(",")
-        .includes("instagram_business_content_publish")
+      permissions &&
+      !permissions.includes("instagram_business_content_publish")
     )
       throw new AppError(
         403,
@@ -215,6 +226,25 @@ export async function exchangeSocialCode(
       .parse(
         await get(`${igBase}/me?fields=user_id,username`, long.access_token),
       );
+    if (!permissions) {
+      const limit = z
+        .object({
+          data: z
+            .array(z.object({ quota_usage: z.number().int().nonnegative() }))
+            .min(1),
+        })
+        .safeParse(
+          await get(
+            `${igBase}/${encodeURIComponent(String(profile.user_id))}/content_publishing_limit?fields=quota_usage`,
+            long.access_token,
+          ),
+        );
+      if (!limit.success)
+        throw new AppError(
+          502,
+          "Instagram publishing access could not be verified. Start again from Automation.",
+        );
+    }
     return {
       accountId: String(profile.user_id),
       name: profile.username,

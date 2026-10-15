@@ -575,6 +575,111 @@ test("OAuth state is owner-bound and single use; provider tokens stay encrypted"
   );
 });
 
+test("Instagram OAuth accepts flat and wrapped token responses and verifies publishing access", async () => {
+  process.env.INSTAGRAM_APP_ID = "fixture-instagram-id";
+  process.env.INSTAGRAM_APP_SECRET = "fixture-instagram-secret";
+  for (const format of [
+    "wrapped",
+    "flat",
+    "array",
+    "omitted",
+    "declined",
+    "probe-denied",
+    "malformed",
+  ]) {
+    const ws = workspace();
+    const userId = one<{ owner_id: string }>(
+      "SELECT owner_id FROM workspaces WHERE id=?",
+      ws,
+    )!.owner_id;
+    const me = { workspaceId: ws, userId } as Parameters<
+      typeof beginSocialConnection
+    >[0];
+    const state = new URL(
+      beginSocialConnection(me, "instagram").url,
+    ).searchParams.get("state")!;
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      calls.push(url.pathname);
+      if (url.hostname === "api.instagram.com") {
+        const token = {
+          access_token: "fixture-short-token",
+          user_id: "178414000000001",
+          ...(format === "omitted" || format === "probe-denied"
+            ? {}
+            : {
+                permissions:
+                  format === "array"
+                    ? [
+                        "instagram_business_basic",
+                        "instagram_business_content_publish",
+                      ]
+                    : format === "declined"
+                      ? "instagram_business_basic"
+                      : "instagram_business_basic,instagram_business_content_publish",
+              }),
+        };
+        return Response.json(
+          format === "wrapped"
+            ? { data: [token] }
+            : format === "malformed"
+              ? { access_token: "fixture-short-token" }
+              : token,
+        );
+      }
+      if (url.pathname.endsWith("/content_publishing_limit"))
+        return format === "probe-denied"
+          ? Response.json({ error: { code: 10 } }, { status: 403 })
+          : Response.json({ data: [{ quota_usage: 0 }] });
+      if (url.pathname === "/access_token")
+        return Response.json({
+          access_token: "fixture-long-token",
+          token_type: "bearer",
+          expires_in: 5184000,
+        });
+      if (url.pathname === "/v26.0/me")
+        return new Response(
+          '{"user_id":9223372036854775806,"username":"Owner fixture"}',
+        );
+      throw new Error("Unexpected Instagram endpoint");
+    };
+    if (["declined", "probe-denied", "malformed"].includes(format)) {
+      await assert.rejects(
+        () => completeSocialConnection(me, "instagram", state, "fixture-code"),
+        format === "declined"
+          ? /publishing permission/
+          : format === "malformed"
+            ? /authorization response/
+            : /platform rejected/,
+      );
+      assert.equal(listConnections(ws).length, 0);
+      if (format !== "probe-denied") assert.equal(calls.length, 1);
+    } else {
+      await completeSocialConnection(me, "instagram", state, "fixture-code");
+      const connection = listConnections(ws)[0];
+      assert.equal(connection.name, "Owner fixture");
+      assert.equal(
+        getConnection(ws, connection.id).accountId,
+        "9223372036854775806",
+      );
+      assert.equal(
+        calls.some((p) => p.endsWith("/content_publishing_limit")),
+        format === "omitted",
+      );
+      assert.equal(
+        JSON.stringify(
+          all(
+            "SELECT credentials FROM social_connections WHERE workspace_id=?",
+            ws,
+          ),
+        ).includes("fixture-long-token"),
+        false,
+      );
+    }
+  }
+});
+
 test("concurrent publishers reserve schedule slots atomically", async () => {
   const ws = workspace(),
     id = connection(ws),
