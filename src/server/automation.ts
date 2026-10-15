@@ -10,7 +10,7 @@ import { all, one, run, transaction } from "./db";
 import { AppError, requireValue } from "./errors";
 import { checkProviders, enqueue, finishJob, getJob } from "./jobs";
 import { getAsset, getProject, insertProject, renderCost } from "./projects";
-import { appUrl } from "./auth";
+import { appUrl, requirePilotWorkspace } from "./auth";
 import { batchPublications, validatePublishingPolicy } from "./social";
 
 export type Grant = AgentGrant & { workspaceId: string };
@@ -71,6 +71,7 @@ function liveGrant(id: string): Grant {
   );
   if (grant.revokedAt || grant.expiresAt <= Date.now())
     throw new AppError(401, "This agent access has expired or was revoked.");
+  requirePilotWorkspace(grant.workspaceId);
   return grant;
 }
 

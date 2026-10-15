@@ -16,6 +16,7 @@ import {
 import { providerSchema, tiktokPostSchema } from "@/lib/social";
 import { mediaResponse } from "@/server/media-response";
 import { publisherStatus } from "@/worker/publish";
+import { urlVerification } from "@/server/url-verification";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handle(
@@ -30,6 +31,11 @@ async function handle(
       path.length === 2 &&
       ["GET", "HEAD"].includes(request.method)
     ) {
+      if (path[1].endsWith(".txt"))
+        return (
+          urlVerification(path[1], request.method === "HEAD") ??
+          new Response("Not found.", { status: 404 })
+        );
       const url = new URL(request.url),
         id = z.string().uuid().parse(path[1]);
       const media = authorizePublicationMedia(

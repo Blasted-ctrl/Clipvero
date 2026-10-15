@@ -8,7 +8,7 @@ process.env.SESSION_SECRET = "test-only-social-encryption-secret-32-characters";
 process.env.APP_URL = "https://clipvero.example.test";
 delete process.env.OPENAI_API_KEY;
 const { db, one, run, all } = await import("../src/server/db");
-const { register } = await import("../src/server/auth");
+const { register, login } = await import("../src/server/auth");
 const {
   createGrant,
   authenticateAgent,
@@ -18,8 +18,16 @@ const {
   revokeGrant,
   listGrants,
 } = await import("../src/server/automation");
-const { getJob, recordRenderResult, finishJob } =
-  await import("../src/server/jobs");
+const {
+  getJob,
+  recordRenderResult,
+  finishJob,
+  enqueue,
+  claimJob,
+  recoverExpiredJobs,
+} = await import("../src/server/jobs");
+const { createPipeline, tickPipelines } =
+  await import("../src/server/pipelines");
 const { saveProject, getProject } = await import("../src/server/projects");
 const {
   sealCredentials,
@@ -36,6 +44,7 @@ const {
   completeSocialConnection,
   cancelPublication,
   publicationCreator,
+  getConnection,
 } = await import("../src/server/social");
 const { publishTick } = await import("../src/worker/publish");
 
@@ -710,4 +719,171 @@ test("TikTok review refreshes expired tokens and refresh contention preserves qu
   );
   await publishTick();
   assert.equal(listPublications(igWs)[0].state, "queued");
+});
+
+test("private owner can create the initial account locally before enabling HTTPS", () => {
+  const previousUrl = process.env.APP_URL;
+  const email = `${crypto.randomUUID()}@example.test`;
+  process.env.PILOT_OWNER_EMAIL = email.toUpperCase();
+  try {
+    process.env.APP_URL = "http://localhost:3000";
+    assert.throws(
+      () => register("other@example.test", "Other", "isolated owner password"),
+      /Registration is closed/,
+    );
+    const user = register(email, "Owner", "isolated owner password");
+    assert.equal(login(email, "isolated owner password"), user);
+    assert.equal(
+      one<{ count: number }>(
+        "SELECT count(*) AS count FROM credit_ledger WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id=?)",
+        user,
+      )!.count,
+      1,
+    );
+    assert.throws(
+      () => register(email, "Owner", "isolated owner password"),
+      /already exists/,
+    );
+    process.env.PILOT_OWNER_EMAIL = `${crypto.randomUUID()}@example.test`;
+    process.env.APP_URL = "https://clipvero.example.test";
+    assert.throws(
+      () =>
+        register(
+          process.env.PILOT_OWNER_EMAIL!,
+          "Owner",
+          "isolated owner password",
+        ),
+      /Registration is closed/,
+    );
+    process.env.APP_URL = "http://public.example.test";
+    assert.throws(
+      () =>
+        register(
+          process.env.PILOT_OWNER_EMAIL!,
+          "Owner",
+          "isolated owner password",
+        ),
+      /Registration is closed/,
+    );
+  } finally {
+    process.env.APP_URL = previousUrl;
+    delete process.env.PILOT_OWNER_EMAIL;
+  }
+});
+
+test("private runs close registration and reject other accounts, grants and queued work", () => {
+  const owner = workspace(),
+    other = workspace(),
+    ownerGrant = grant(owner),
+    otherGrant = grant(other),
+    social = connection(other);
+  const ownerBatch = batch(ownerGrant.grant.id),
+    otherBatch = batch(otherGrant.grant.id);
+  const ownerEmail = one<{ email: string }>(
+    "SELECT u.email FROM users u JOIN workspaces w ON w.owner_id=u.id WHERE w.id=?",
+    owner,
+  )!.email;
+  const otherEmail = one<{ email: string }>(
+    "SELECT u.email FROM users u JOIN workspaces w ON w.owner_id=u.id WHERE w.id=?",
+    other,
+  )!.email;
+  process.env.PILOT_OWNER_EMAIL = ownerEmail.toUpperCase();
+  try {
+    assert.throws(
+      () =>
+        register("another@example.test", "Another", "isolated owner password"),
+      /Registration is closed/,
+    );
+    assert.ok(login(ownerEmail, "isolated owner password"));
+    assert.throws(
+      () => login(otherEmail, "isolated owner password"),
+      /incorrect/,
+    );
+    assert.throws(
+      () => getBatch(otherGrant.grant.id, otherBatch.id),
+      /private owner/,
+    );
+    assert.throws(() => getConnection(other, social), /private owner/);
+    assert.throws(
+      () =>
+        enqueue(
+          other,
+          "render",
+          crypto.randomUUID(),
+          otherBatch.videos[0].projectId!,
+        ),
+      /private owner/,
+    );
+    assert.equal(claimJob()!.id, ownerBatch.videos[0].id);
+    assert.equal(claimJob(), null);
+    assert.equal(getJob(other, otherBatch.videos[0].id).state, "queued");
+  } finally {
+    delete process.env.PILOT_OWNER_EMAIL;
+  }
+});
+
+test("private workers preserve other accounts' schedules, publications and expired jobs", async () => {
+  const owner = workspace(),
+    other = workspace(),
+    social = connection(other);
+  const access = grant(other, 3, 10, policy([social], true));
+  const queued = batch(access.grant.id);
+  complete(other, queued.videos[0].id);
+  planPublications();
+  due();
+  const unplanned = batch(access.grant.id);
+  complete(other, unplanned.videos[0].id);
+  const expired = batch(access.grant.id);
+  run(
+    "UPDATE jobs SET state='running',lease_until=0 WHERE id=?",
+    expired.videos[0].id,
+  );
+  const pipeline = createPipeline(other, {
+    name: "Other owner's schedule",
+    config: { ...script, mode: "prompt" },
+    intervalHours: 24,
+    maxRuns: 2,
+    budget: 10,
+  });
+  run("UPDATE pipelines SET active=1,next_run=0 WHERE id=?", pipeline.id);
+  const snapshot = () =>
+    JSON.stringify({
+      jobs: all("SELECT * FROM jobs WHERE workspace_id=? ORDER BY id", other),
+      projects: all(
+        "SELECT * FROM projects WHERE workspace_id=? ORDER BY id",
+        other,
+      ),
+      pipelines: all(
+        "SELECT * FROM pipelines WHERE workspace_id=? ORDER BY id",
+        other,
+      ),
+      publications: all(
+        "SELECT * FROM publications WHERE workspace_id=? ORDER BY id",
+        other,
+      ),
+      ledger: all(
+        "SELECT * FROM credit_ledger WHERE workspace_id=? ORDER BY id",
+        other,
+      ),
+      dispatched: all(
+        "SELECT d.* FROM agent_batch_dispatch d JOIN jobs j ON j.id=d.job_id WHERE j.workspace_id=? ORDER BY job_id",
+        other,
+      ),
+    });
+  const before = snapshot();
+  process.env.PILOT_OWNER_EMAIL = one<{ email: string }>(
+    "SELECT u.email FROM users u JOIN workspaces w ON w.owner_id=u.id WHERE w.id=?",
+    owner,
+  )!.email;
+  globalThis.fetch = async () => {
+    throw new Error("Excluded accounts must not call a provider");
+  };
+  try {
+    tickPipelines();
+    recoverExpiredJobs();
+    assert.equal(await publishTick(), false);
+    assert.equal(snapshot(), before);
+  } finally {
+    delete process.env.PILOT_OWNER_EMAIL;
+  }
 });

@@ -19,6 +19,7 @@ import {
 import { tiktokPostSchema } from "../lib/social";
 import { duration } from "../lib/model";
 import { AppError } from "../server/errors";
+import { pilotOwnerEmail } from "../server/auth";
 
 type Pending = {
   id: string;
@@ -139,13 +140,17 @@ export async function publishTick() {
   planPublications();
   // An expired external write must be reconciled, never resubmitted.
   run(
-    "UPDATE publications SET state='uncertain',error='Publisher stopped during a platform request. Check the platform account before retrying.',lease_until=NULL,lease_token=NULL,updated_at=? WHERE state IN ('uploading','publishing') AND lease_until<?",
+    "UPDATE publications SET state='uncertain',error='Publisher stopped during a platform request. Check the platform account before retrying.',lease_until=NULL,lease_token=NULL,updated_at=? WHERE state IN ('uploading','publishing') AND lease_until<? AND (?='' OR workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?))",
     Date.now(),
     Date.now(),
+    pilotOwnerEmail(),
+    pilotOwnerEmail(),
   );
   const item = transaction(() => {
     const row = one<Omit<Pending, "leaseToken">>(
-      "SELECT p.id,p.workspace_id AS workspaceId,p.grant_id AS grantId,p.connection_id AS connectionId,p.project_id AS projectId,p.revision,p.asset_id AS assetId,p.caption,p.post_info AS postInfo,p.state,p.provider_id AS providerId,p.post_id AS postId,p.deadline,p.created_at AS createdAt,p.submitted_at AS submittedAt FROM publications p JOIN social_connections c ON c.id=p.connection_id WHERE p.state IN ('queued','processing','uncertain','published') AND (p.state!='uncertain' OR p.provider_id IS NOT NULL) AND (p.state!='published' OR (c.provider='instagram' AND p.post_id IS NOT NULL AND p.post_url IS NULL) OR (c.provider='tiktok' AND p.post_id IS NULL AND COALESCE(p.submitted_at,p.created_at)>?)) AND p.next_poll<=? AND p.scheduled_at<=? AND (p.lease_until IS NULL OR p.lease_until<?) ORDER BY p.next_poll,p.scheduled_at LIMIT 1",
+      "SELECT p.id,p.workspace_id AS workspaceId,p.grant_id AS grantId,p.connection_id AS connectionId,p.project_id AS projectId,p.revision,p.asset_id AS assetId,p.caption,p.post_info AS postInfo,p.state,p.provider_id AS providerId,p.post_id AS postId,p.deadline,p.created_at AS createdAt,p.submitted_at AS submittedAt FROM publications p JOIN social_connections c ON c.id=p.connection_id WHERE (?='' OR p.workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?)) AND p.state IN ('queued','processing','uncertain','published') AND (p.state!='uncertain' OR p.provider_id IS NOT NULL) AND (p.state!='published' OR (c.provider='instagram' AND p.post_id IS NOT NULL AND p.post_url IS NULL) OR (c.provider='tiktok' AND p.post_id IS NULL AND COALESCE(p.submitted_at,p.created_at)>?)) AND p.next_poll<=? AND p.scheduled_at<=? AND (p.lease_until IS NULL OR p.lease_until<?) ORDER BY p.next_poll,p.scheduled_at LIMIT 1",
+      pilotOwnerEmail(),
+      pilotOwnerEmail(),
       Date.now() - 86400000,
       Date.now(),
       Date.now(),

@@ -2,6 +2,7 @@ import { all, one, run, transaction } from "./db";
 import { AppError, requireValue } from "./errors";
 import { estimateCost, type CreateInput, type Job } from "../lib/model";
 import { getProject, renderCost } from "./projects";
+import { pilotOwnerEmail, requirePilotWorkspace } from "./auth";
 
 export type JobRow = Job & {
   workspaceId: string;
@@ -50,6 +51,7 @@ export function enqueue(
   input?: CreateInput,
   pipelineId: string | null = null,
 ) {
+  requirePilotWorkspace(workspace);
   if (kind === "generate") checkProviders(input!);
   return transaction(() => {
     const previous = one<JobRow>(
@@ -132,7 +134,9 @@ export function enqueue(
 export function claimJob() {
   return transaction(() => {
     const job = one<JobRow>(
-      `${select} WHERE state='queued' ORDER BY created_at LIMIT 1`,
+      `${select} WHERE state='queued' AND (?='' OR workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?)) ORDER BY created_at LIMIT 1`,
+      pilotOwnerEmail(),
+      pilotOwnerEmail(),
     );
     if (!job) return null;
     run(
@@ -275,8 +279,10 @@ export function recordRenderResult(
 }
 export function recoverExpiredJobs() {
   all<JobRow>(
-    `${select} WHERE state='running' AND lease_until<?`,
+    `${select} WHERE state='running' AND lease_until<? AND (?='' OR workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?))`,
     Date.now(),
+    pilotOwnerEmail(),
+    pilotOwnerEmail(),
   ).forEach((j) =>
     finishJob(
       j,

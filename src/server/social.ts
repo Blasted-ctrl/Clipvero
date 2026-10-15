@@ -17,7 +17,12 @@ import {
   type TikTokPost,
 } from "@/lib/social";
 import { all, one, run, transaction } from "./db";
-import { appUrl, type Identity } from "./auth";
+import {
+  appUrl,
+  pilotOwnerEmail,
+  requirePilotWorkspace,
+  type Identity,
+} from "./auth";
 import { AppError, requireValue } from "./errors";
 import { getProject, reviewProject } from "./projects";
 import {
@@ -88,6 +93,7 @@ export function listConnections(workspace: string): SocialConnection[] {
   );
 }
 export function getConnection(workspace: string, id: string) {
+  requirePilotWorkspace(workspace);
   const connection = requireValue(
     one<Connection>(
       `${connectionSelect} WHERE workspace_id=? AND id=? AND disconnected_at IS NULL`,
@@ -288,7 +294,9 @@ export function planPublications() {
       expiresAt: number;
       projectId: string;
     }>(
-      "SELECT j.id,j.workspace_id AS workspaceId,g.id AS grantId,g.policy,g.runs,g.revoked_at AS revokedAt,g.expires_at AS expiresAt,j.project_id AS projectId FROM agent_batch_items i JOIN agent_batches b ON b.id=i.batch_id JOIN agent_grants g ON g.id=b.grant_id JOIN jobs j ON j.id=i.job_id WHERE j.state='completed' AND NOT EXISTS (SELECT 1 FROM agent_batch_dispatch d WHERE d.job_id=j.id) ORDER BY b.created_at,i.position LIMIT 100",
+      "SELECT j.id,j.workspace_id AS workspaceId,g.id AS grantId,g.policy,g.runs,g.revoked_at AS revokedAt,g.expires_at AS expiresAt,j.project_id AS projectId FROM agent_batch_items i JOIN agent_batches b ON b.id=i.batch_id JOIN agent_grants g ON g.id=b.grant_id JOIN jobs j ON j.id=i.job_id WHERE j.state='completed' AND (?='' OR j.workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?)) AND NOT EXISTS (SELECT 1 FROM agent_batch_dispatch d WHERE d.job_id=j.id) ORDER BY b.created_at,i.position LIMIT 100",
+      pilotOwnerEmail(),
+      pilotOwnerEmail(),
     );
     for (const item of completed) {
       run("INSERT INTO agent_batch_dispatch VALUES (?)", item.id);

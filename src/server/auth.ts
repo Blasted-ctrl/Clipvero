@@ -10,6 +10,21 @@ import { all, one, run, transaction } from "./db";
 import { AppError } from "./errors";
 
 const cookieName = "clipvero_session";
+export function pilotOwnerEmail() {
+  return process.env.PILOT_OWNER_EMAIL?.trim().toLowerCase() || "";
+}
+export function requirePilotWorkspace(workspace: string) {
+  const email = pilotOwnerEmail();
+  if (
+    email &&
+    !one(
+      "SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE w.id=? AND lower(u.email)=?",
+      workspace,
+      email,
+    )
+  )
+    throw new AppError(403, "This workspace is outside the private owner run.");
+}
 export type Identity = {
   userId: string;
   workspaceId: string;
@@ -56,13 +71,16 @@ export async function createSession(userId: string) {
 export async function identity(): Promise<Identity | null> {
   const token = (await cookies()).get(cookieName)?.value;
   if (!token) return null;
-  return (
+  const me =
     one<Identity>(
       `SELECT u.id AS userId, u.email, u.name, w.id AS workspaceId, w.name AS workspaceName, w.credits, w.plan, w.subscription_status AS subscriptionStatus FROM sessions s JOIN users u ON s.user_id=u.id JOIN workspaces w ON w.owner_id=u.id WHERE s.token_hash=? AND s.expires_at>?`,
       tokenHash(token),
       Date.now(),
-    ) ?? null
-  );
+    ) ?? null;
+  return me &&
+    (!pilotOwnerEmail() || me.email.toLowerCase() === pilotOwnerEmail())
+    ? me
+    : null;
 }
 export async function requireIdentity() {
   const me = await identity();
@@ -76,6 +94,16 @@ export async function logout() {
   jar.delete(cookieName);
 }
 export function register(email: string, name: string, password: string) {
+  const owner = pilotOwnerEmail();
+  const localSetup =
+    process.env.NODE_ENV !== "production" &&
+    new URL(appUrl()).protocol === "http:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(new URL(appUrl()).hostname);
+  if (owner && (!localSetup || email.toLowerCase() !== owner))
+    throw new AppError(
+      403,
+      "Registration is closed for this private run. Sign in with the owner's account.",
+    );
   if (
     process.env.NODE_ENV === "production" &&
     (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)
@@ -116,6 +144,8 @@ export function register(email: string, name: string, password: string) {
   });
 }
 export function login(email: string, password: string) {
+  if (pilotOwnerEmail() && email.toLowerCase() !== pilotOwnerEmail())
+    throw new AppError(401, "Email or password is incorrect.");
   const user = one<{ id: string; password_hash: string }>(
     "SELECT id, password_hash FROM users WHERE email=?",
     email,

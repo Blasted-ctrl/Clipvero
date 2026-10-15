@@ -8,6 +8,8 @@
   },
   "scripts": {
     "setup:env": "tsx scripts/setup-env.ts",
+    "pilot:setup": "tsx scripts/setup-pilot.ts",
+    "pilot": "tsx --env-file-if-exists=.env scripts/pilot.ts",
     "agent:mcp": "tsx scripts/agent-mcp.ts",
     "dev": "next dev --hostname 127.0.0.1",
     "worker": "tsx --env-file-if-exists=.env src/worker/main.ts",

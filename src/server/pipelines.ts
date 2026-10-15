@@ -1,4 +1,5 @@
 import { all, one, run, transaction } from "./db";
+import { pilotOwnerEmail } from "./auth";
 import { AppError, requireValue } from "./errors";
 import { checkProviders, enqueue } from "./jobs";
 import {
@@ -101,8 +102,10 @@ export function runPipeline(
 }
 export function tickPipelines() {
   const due = all<{ id: string; workspace_id: string; next_run: number }>(
-    "SELECT id,workspace_id,next_run FROM pipelines WHERE active=1 AND next_run<=?",
+    "SELECT id,workspace_id,next_run FROM pipelines WHERE active=1 AND next_run<=? AND (?='' OR workspace_id IN (SELECT w.id FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE lower(u.email)=?))",
     Date.now(),
+    pilotOwnerEmail(),
+    pilotOwnerEmail(),
   );
   for (const p of due) {
     try {

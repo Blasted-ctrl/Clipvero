@@ -155,7 +155,7 @@ The Compose services now honor `ENVIRONMENT`; production FastAPI startup require
 
 Use the Node studio (`CLIPVERO_BACKEND=legacy`) for this workflow. The PostgreSQL Compose deployment does not expose these operations yet.
 
-1. Add your OpenAI key as described above and restart `pnpm dev:all`. For a first run without provider charges, the agent can render an unchanged script with voice `none` and images disabled. AI narration/images require your key and incur provider charges.
+1. Your connected agent can write a complete script and send it as mode `script`, voice `none`, with images disabled. This renders without an OpenAI key. Add an API key only if you want the background worker to generate scripts, narration or images itself. A chat subscription does not provide API credentials to the worker; use an uploaded recording for narration without an API provider.
 2. Open **Automation** in the sidebar. Connect your publishing accounts after completing the account setup below.
 3. Choose **Connect an agent**. Start with **1 video**, a credit allowance and an expiry. Select the destination accounts and local start/end times. The saved schedule uses UTC instants; elapsed minutes determine spacing across daylight-saving changes. The guided video always needs your review.
 4. Save the one-time token in your MCP client's private settings. An HTTP MCP client uses `https://YOUR_DOMAIN/api/mcp` with `Authorization: Bearer YOUR_TOKEN`. For a stdio client, launch `pnpm --silent --dir C:/Users/kings/Clipvero agent:mcp` with `CLIPVERO_URL` and `CLIPVERO_AGENT_TOKEN` in its environment. The bridge forwards requests to your website. Clients must support Bearer HTTP or stdio; OAuth connector discovery is not implemented.
@@ -165,6 +165,25 @@ Use the Node studio (`CLIPVERO_BACKEND=legacy`) for this workflow. The PostgreSQ
 Agents can create supported script, prompt, story, character, explainer and marketing jobs and read their own results. Source clipping/gameplay batches are rejected so one job cannot evade the video allowance. Failed attempts still count against that token's allowance; job refunds return credits to the workspace. Internal credits are a fixed processing tariff, not a dollar cap on your provider's bill. Inspect usage and control provider spending separately.
 
 The website, video worker and publisher must share persistent `DATA_DIR`, `APP_URL` and stable `SESSION_SECRET`. `pnpm dev:all` runs all three locally; separate processes use `pnpm dev`, `pnpm worker` and `pnpm publisher`. The render Dockerfile can also run the publisher with `pnpm exec tsx scripts/publisher.ts`. Keep one durable volume on one host for this personal workflow. SQLite is not a distributed multi-host queue.
+
+### Run privately from your computer without buying a domain
+
+1. Create a free [ngrok account](https://dashboard.ngrok.com). Copy the assigned hostname from **Domains** and your token from **Your Authtoken**. Install the [official ngrok agent](https://ngrok.com/download); on Windows, the launcher also finds `.tools/ngrok/ngrok.exe`. Set `NGROK_BIN` only when using a different executable path.
+2. Add these settings to your private `.env`. Use your own values; the domain field takes only the hostname, without `https://` or a path:
+
+   ```dotenv
+   PILOT_OWNER_EMAIL=your_clipvero_login_email
+   NGROK_DOMAIN=your_assigned_hostname.ngrok-free.dev
+   NGROK_AUTHTOKEN=your_actual_ngrok_token
+   ```
+
+3. Keep `APP_URL=http://localhost:3000` for initial setup. Run `pnpm dev`, open **http://localhost:3000/signup**, and create the account using exactly that owner email. Only the configured owner can register in local development. Stop the local app once you are signed in.
+4. Run `pnpm pilot:setup`. It checks that the owner exists and updates only `APP_URL` to your HTTPS hostname while preserving your secrets.
+5. Run `pnpm pilot`. It builds and starts the website, video worker, publisher and tunnel together. It prints your actual website, OAuth callbacks and TikTok media prefix. Sign in at the HTTPS address; your localhost browser session does not transfer there. Leave the terminal open and your computer awake. **Ctrl+C** stops the processes started by this command.
+
+This private run accepts only the configured owner account, including existing sessions and agent grants. Registration is closed at the public address. It does not delete other local accounts or their data. The ngrok inspector and remote management are disabled. Free ngrok pages may show a one-time browser notice; normal API traffic does not receive it. The free plan supplies one assigned development hostname with usage limits; see [ngrok's free-plan documentation](https://ngrok.com/docs/pricing-limits/free-plan-limits).
+
+When TikTok asks you to verify the media URL prefix, place its exact downloaded `.txt` proof file in `.local-services/tiktok-verification/`. Verify `https://YOUR_HOSTNAME/api/social/media/` in the developer portal. Only small plain-text proof files from that ignored folder are served there; video downloads still require their signed URL. Keep that prefix and HTTPS address unchanged after registering them. Follow TikTok's [media transfer guide](https://developers.tiktok.com/doc/content-posting-api-media-transfer-guide).
 
 ### Connect Instagram and TikTok
 
