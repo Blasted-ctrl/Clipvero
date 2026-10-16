@@ -262,8 +262,10 @@ test("malformed or missing generated object diagrams fail instead of becoming ti
     },
   ]) {
     await withProviderFixtures([response], async (prompts) => {
+      // The model gets the exact problem back once; with no corrected reply the
+      // script still fails, and the bad diagram never turns into a title card.
       await assert.rejects(localScript(input(), ""));
-      assert.equal(prompts.length, 1);
+      assert.match(prompts[1] ?? "", /could not be used/);
     });
   }
 });

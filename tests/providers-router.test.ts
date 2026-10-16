@@ -202,3 +202,177 @@ test("a bad request is not retried against every key", () =>
       assert.equal(calls, 1);
     },
   ));
+
+test("OpenRouter only uses free models unless paid use is explicitly allowed", () =>
+  withEnv(
+    {
+      CLIPVERO_TEXT_PROVIDERS: "openrouter",
+      OPEN_ROUTER_KEYS: "sk-or-test",
+      OPEN_ROUTER_ALLOW_PAID: undefined,
+      OPEN_ROUTER_MODEL: "openai/gpt-5",
+    },
+    async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        return Response.json({ choices: [{ message: { content: "{}" } }] });
+      }) as typeof fetch;
+      await assert.rejects(writeText("x"), /not a free model/);
+      assert.equal(
+        calls,
+        0,
+        "a paid model is refused before any request is sent",
+      );
+      process.env.OPEN_ROUTER_MODEL = "nvidia/nemotron-3.5-super-vl:free";
+      const result = await writeText("x");
+      assert.equal(result.provider, "openrouter");
+      assert.equal(calls, 1);
+      process.env.OPEN_ROUTER_MODEL = "openai/gpt-5";
+      process.env.OPEN_ROUTER_ALLOW_PAID = "true";
+      assert.equal((await writeText("x")).provider, "openrouter");
+    },
+  ));
+
+test("a script that breaks a size limit is sent back with the exact problem and corrected", () =>
+  withEnv(
+    { CLIPVERO_TEXT_PROVIDERS: "groq", GROQ_API_KEYS: "gsk-test" },
+    async () => {
+      const { localScript } = await import("../src/server/local-writer");
+      const { createSchema } = await import("../src/lib/model");
+      const tooLong = Array.from({ length: 11 }, (_, i) => `line ${i}`);
+      const reply = (code: string[] | null) =>
+        JSON.stringify({
+          title: "Binary search",
+          description: "A short caption #code",
+          topic: "BINARY SEARCH",
+          scenes: [
+            {
+              text: "A sorted list lets you skip half the work.",
+              chapter: "Idea",
+              visual: { type: "title", text: "BINARY SEARCH" },
+              code: code ? { lines: code, highlight: 0 } : null,
+            },
+            {
+              text: "Check the middle, then discard half.",
+              chapter: "Idea",
+              visual: { type: "title", text: "BINARY SEARCH" },
+            },
+          ],
+        });
+      const prompts: string[] = [];
+      let call = 0;
+      globalThis.fetch = (async (_url: string, init: RequestInit) => {
+        prompts.push(JSON.parse(String(init.body)).messages[0].content);
+        return Response.json({
+          choices: [
+            { message: { content: reply(call++ === 0 ? tooLong : ["x = 1"]) } },
+          ],
+        });
+      }) as typeof fetch;
+      const input = createSchema.parse({
+        title: "Binary search",
+        mode: "explainer",
+        content: "Binary search",
+        duration: 30,
+        voice: "free-cute",
+        style: "explainer",
+        rightsConfirmed: true,
+      });
+      const result = await localScript(input, "");
+      assert.equal(call, 2, "one corrected retry");
+      assert.match(prompts[1], /could not be used/);
+      assert.match(prompts[1], /lines/);
+      assert.equal(result.scenes.length, 2);
+    },
+  ));
+
+test("Gemini voices are encoded to MP3 and get word timings from Whisper on Groq", () =>
+  withEnv(
+    {
+      CLIPVERO_VOICE_PROVIDERS: "gemini",
+      GEMINI_API_KEY: "g-test",
+      GOOGLE_API_KEY: undefined,
+      GROQ_API_KEYS: "gsk-test",
+      ELEVENLABS_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      VOICE_RETRY_MS: "1",
+    },
+    async () => {
+      const seen: string[] = [];
+      globalThis.fetch = (async (url: string, init: RequestInit) => {
+        seen.push(url);
+        if (url.includes("generativelanguage")) {
+          const body = JSON.parse(String(init.body));
+          assert.match(
+            body.contents[0].parts[0].text,
+            /^Say this .*: Hello world\.$/,
+          );
+          assert.equal(
+            body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig
+              .voiceName,
+            "Leda",
+          );
+          const pcm = Buffer.alloc(24000 * 2); // one second of silence
+          return Response.json({
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { data: pcm.toString("base64") } }],
+                },
+              },
+            ],
+          });
+        }
+        return Response.json({
+          duration: 1,
+          words: [
+            { word: "Hello", start: 0.1, end: 0.4 },
+            { word: "world", start: 0.5, end: 0.9 },
+          ],
+        });
+      }) as typeof fetch;
+      const [spoken] = await speakScenes(["Hello world."], "free-cute");
+      assert.equal(spoken.provider, "gemini:Leda");
+      assert.deepEqual(
+        spoken.words.map((w) => w.text),
+        ["Hello", "world."],
+      );
+      assert.equal(spoken.duration, 1);
+      assert.ok(spoken.audio.length > 500, "real MP3 data");
+      assert.ok(
+        seen.some((u) =>
+          u.includes("api.groq.com/openai/v1/audio/transcriptions"),
+        ),
+      );
+    },
+  ));
+
+test("a rate-limited Gemini voice falls through to the next provider instead of failing the video", () =>
+  withEnv(
+    {
+      CLIPVERO_VOICE_PROVIDERS: "gemini,openai",
+      GEMINI_API_KEY: "g-test",
+      GROQ_API_KEYS: "gsk-test",
+      OPENAI_API_KEY: "o-test",
+      ELEVENLABS_API_KEY: undefined,
+      VOICE_RETRY_MS: "1",
+    },
+    async () => {
+      let geminiCalls = 0;
+      globalThis.fetch = (async (url: string) => {
+        if (url.includes("generativelanguage")) {
+          geminiCalls++;
+          return new Response("quota", { status: 429 });
+        }
+        if (url.endsWith("/audio/speech"))
+          return new Response(new Uint8Array([1, 2, 3]));
+        return Response.json({
+          duration: 1,
+          words: [{ word: "Hi", start: 0, end: 0.5 }],
+        });
+      }) as typeof fetch;
+      const [spoken] = await speakScenes(["Hi."], "free-warm");
+      assert.equal(geminiCalls, 3, "three attempts with backoff");
+      assert.equal(spoken.provider, "openai");
+    },
+  ));

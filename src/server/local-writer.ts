@@ -19,6 +19,47 @@ export function localWriterPath() {
 }
 
 let lastWriter = "";
+
+/** Why a reply failed validation, in a form the model can act on. */
+function describe(error: unknown) {
+  const issues = (
+    error as { issues?: { path: (string | number)[]; message: string }[] }
+  ).issues;
+  return issues?.length
+    ? issues
+        .slice(0, 6)
+        .map((i) => `${i.path.join(".") || "reply"}: ${i.message}`)
+        .join("; ")
+    : error instanceof Error
+      ? error.message
+      : "the reply was not valid JSON";
+}
+
+/**
+ * Asks for a reply and parses it. When a model breaks a size limit or returns
+ * malformed JSON, the exact problems go back to it for a corrected version.
+ */
+async function askParsed<T>(prompt: string, read: (output: string) => T) {
+  let request = prompt;
+  let failure: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return read(await ask(request));
+    } catch (error) {
+      failure = error;
+      if (
+        /Every script writer failed|No script writer/.test(
+          String((error as Error)?.message),
+        )
+      )
+        throw error;
+      request = `${prompt}
+
+Your previous reply could not be used: ${describe(error)}. Reply again with ONLY corrected JSON that respects every limit above.`;
+    }
+  }
+  throw failure;
+}
 async function ask(prompt: string) {
   const { text, provider } = await writeText(prompt);
   lastWriter = provider;
@@ -126,13 +167,12 @@ Use original or owner-supplied visual assets. Named fictional characters may app
 ${visualMenu}
 Reply with ONLY a JSON object, no code fences:
 {"title":"...","description":"one-line Instagram caption with 2-4 hashtags","topic":"SHORT TOPIC (max 28 chars)","scenes":[{"text":"spoken words","chapter":"Chapter name","visual":{...}}]}`;
-  let result = parse(await ask(base));
+  let result = await askParsed(base, parse);
   const issues = scriptIssues(result.scenes.join("\n"));
   if (issues.length)
-    result = parse(
-      await ask(
-        `${base}\n\nYour previous draft broke the style rules: ${issues.join("; ")}. Rewrite it so none of those patterns appear.\nPrevious draft: ${JSON.stringify(result)}`,
-      ),
+    result = await askParsed(
+      `${base}\n\nYour previous draft broke the style rules: ${issues.join("; ")}. Rewrite it so none of those patterns appear.\nPrevious draft: ${JSON.stringify(result)}`,
+      parse,
     );
   const remaining = scriptIssues(result.scenes.join("\n"));
   if (remaining.length)
@@ -349,17 +389,16 @@ Keep the conversation calm: one stable background and two hosts. Use at most thr
 ${visualMenu}
 Reply with ONLY a JSON object, no code fences:
 {"title":"...","description":"one-line Instagram caption with 2-4 hashtags","topic":"SHORT TOPIC","lines":[{"speaker":"Byte","text":"..."},{"speaker":"Theo","text":"...","visual":{...}}]}`;
-  let raw = await ask(prompt);
-  let parsed = dialogueSchema.parse(
-    JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)),
-  );
+  const readDialogue = (raw: string) =>
+    dialogueSchema.parse(
+      JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)),
+    );
+  let parsed = await askParsed(prompt, readDialogue);
   const issues = scriptIssues(parsed.lines.map((l) => l.text).join("\n"));
   if (issues.length) {
-    raw = await ask(
+    parsed = await askParsed(
       `${prompt}\n\nYour previous draft broke the style rules: ${issues.join("; ")}. Rewrite it without those patterns.\nPrevious draft: ${JSON.stringify(parsed)}`,
-    );
-    parsed = dialogueSchema.parse(
-      JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)),
+      readDialogue,
     );
   }
   const remaining = scriptIssues(parsed.lines.map((l) => l.text).join("\n"));

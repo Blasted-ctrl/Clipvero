@@ -16,9 +16,32 @@ type ApiProvider = {
   base: string;
   kind: "openai" | "anthropic";
   maxTokens?: number;
+  freeOnly?: boolean;
 };
 
 const apiProviders: ApiProvider[] = [
+  {
+    // OpenRouter: many hosted models behind one key. Only ":free" models are used
+    // unless OPEN_ROUTER_ALLOW_PAID=true, so a stray setting can't spend money.
+    id: "openrouter",
+    keys: ["OPEN_ROUTER_KEYS", "OPEN_ROUTER_KEY", "OPENROUTER_API_KEY"],
+    modelEnv: "OPEN_ROUTER_MODEL",
+    model: "nvidia/nemotron-3.5-super-vl:free",
+    base: "https://openrouter.ai/api/v1",
+    kind: "openai",
+    maxTokens: 8192,
+    freeOnly: true,
+  },
+  {
+    // Groq: very fast hosted open models behind an OpenAI-style API.
+    id: "groq",
+    keys: ["GROQ_API_KEYS", "GROQ_API_KEY"],
+    modelEnv: "GROQ_MODEL",
+    model: "qwen/qwen3.8-27b",
+    base: "https://api.groq.com/openai/v1",
+    kind: "openai",
+    maxTokens: 8192,
+  },
   {
     // NVIDIA NIM (build.nvidia.com): free hosted models behind an OpenAI-style API.
     id: "nvidia",
@@ -79,7 +102,7 @@ const apiProviders: ApiProvider[] = [
   },
 ];
 const defaultOrder =
-  "nvidia,anthropic,openai,gemini,deepseek,kimi,qwen,claude-code,codex";
+  "groq,openrouter,nvidia,anthropic,openai,gemini,deepseek,kimi,qwen,claude-code,codex";
 
 /** Every configured key for a provider; a variable may hold several, comma-separated. */
 const keysFor = (provider: ApiProvider) => [
@@ -146,6 +169,14 @@ export function availableWriters() {
 
 async function callApi(provider: ApiProvider, key: string, prompt: string) {
   const model = process.env[provider.modelEnv]?.trim() || provider.model;
+  if (
+    provider.freeOnly &&
+    !model.endsWith(":free") &&
+    process.env.OPEN_ROUTER_ALLOW_PAID !== "true"
+  )
+    throw new Error(
+      `${provider.id}: ${model} is not a free model. Pick one ending in ":free" or set OPEN_ROUTER_ALLOW_PAID=true.`,
+    );
   const response = await fetch(
     provider.kind === "anthropic"
       ? `${provider.base}/messages`
