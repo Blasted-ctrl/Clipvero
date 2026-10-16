@@ -143,3 +143,62 @@ test("voice router falls back to OpenAI with word timings when ElevenLabs fails"
       );
     },
   ));
+
+test("NVIDIA NIM rotates through several comma-separated keys and skips a rate-limited one", () =>
+  withEnv(
+    {
+      CLIPVERO_TEXT_PROVIDERS: "nvidia",
+      NVIDIA_API_KEYS: "nvapi-first, nvapi-second",
+      NVIDIA_API_KEY: undefined,
+      NVIDIA_MODEL: undefined,
+    },
+    async () => {
+      assert.deepEqual(availableWriters(), ["nvidia"]);
+      const used: {
+        url: string;
+        auth: string;
+        body: { model: string; max_tokens: number };
+      }[] = [];
+      globalThis.fetch = (async (url: string, init: RequestInit) => {
+        const auth = String(
+          (init.headers as Record<string, string>).Authorization,
+        );
+        used.push({ url, auth, body: JSON.parse(String(init.body)) });
+        return auth.endsWith("nvapi-first")
+          ? new Response("slow down", { status: 429 })
+          : Response.json({
+              choices: [{ message: { content: '{"ok":true}' } }],
+            });
+      }) as typeof fetch;
+      const result = await writeText("write");
+      assert.equal(result.provider, "nvidia");
+      assert.equal(
+        used[0].url,
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+      );
+      assert.equal(used[0].body.model, "deepseek-ai/deepseek-v4.1-flash");
+      assert.equal(used[0].body.max_tokens, 8192);
+      assert.ok(
+        used.some((call) => call.auth.endsWith("nvapi-second")),
+        "the second key is used",
+      );
+      // The next call starts from the other key, so load is shared.
+      used.length = 0;
+      await writeText("write again");
+      assert.ok(used[0].auth.endsWith("nvapi-second"));
+    },
+  ));
+
+test("a bad request is not retried against every key", () =>
+  withEnv(
+    { CLIPVERO_TEXT_PROVIDERS: "nvidia", NVIDIA_API_KEYS: "nvapi-a,nvapi-b" },
+    async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        return new Response("bad request", { status: 400 });
+      }) as typeof fetch;
+      await assert.rejects(writeText("x"), /HTTP 400/);
+      assert.equal(calls, 1);
+    },
+  ));

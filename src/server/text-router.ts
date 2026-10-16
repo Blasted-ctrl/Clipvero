@@ -15,9 +15,20 @@ type ApiProvider = {
   modelEnv: string;
   base: string;
   kind: "openai" | "anthropic";
+  maxTokens?: number;
 };
 
 const apiProviders: ApiProvider[] = [
+  {
+    // NVIDIA NIM (build.nvidia.com): free hosted models behind an OpenAI-style API.
+    id: "nvidia",
+    keys: ["NVIDIA_API_KEYS", "NVIDIA_API_KEY"],
+    modelEnv: "NVIDIA_MODEL",
+    model: "deepseek-ai/deepseek-v4.1-flash",
+    base: "https://integrate.api.nvidia.com/v1",
+    kind: "openai",
+    maxTokens: 8192,
+  },
   {
     id: "anthropic",
     keys: ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
@@ -68,10 +79,18 @@ const apiProviders: ApiProvider[] = [
   },
 ];
 const defaultOrder =
-  "anthropic,openai,gemini,deepseek,kimi,qwen,claude-code,codex";
+  "nvidia,anthropic,openai,gemini,deepseek,kimi,qwen,claude-code,codex";
 
-const keyFor = (provider: ApiProvider) =>
-  provider.keys.map((name) => process.env[name]?.trim()).find(Boolean);
+/** Every configured key for a provider; a variable may hold several, comma-separated. */
+const keysFor = (provider: ApiProvider) => [
+  ...new Set(
+    provider.keys
+      .flatMap((name) => (process.env[name] ?? "").split(","))
+      .map((key) => key.trim())
+      .filter(Boolean),
+  ),
+];
+let rotation = 0;
 
 /** Claude Code CLI on this machine; CLAUDE_BIN=none disables it. */
 export function claudeCodePath() {
@@ -118,7 +137,7 @@ function order() {
 export function availableWriters() {
   return order().filter((id) => {
     const api = apiProviders.find((p) => p.id === id);
-    if (api) return Boolean(keyFor(api));
+    if (api) return keysFor(api).length > 0;
     if (id === "claude-code") return Boolean(claudeCodePath());
     if (id === "codex") return Boolean(codexPath());
     return false;
@@ -151,7 +170,11 @@ async function callApi(provider: ApiProvider, key: string, prompt: string) {
               max_tokens: 8000,
               messages: [{ role: "user", content: prompt }],
             }
-          : { model, messages: [{ role: "user", content: prompt }] },
+          : {
+              model,
+              messages: [{ role: "user", content: prompt }],
+              ...(provider.maxTokens ? { max_tokens: provider.maxTokens } : {}),
+            },
       ),
       signal: AbortSignal.timeout(180000),
     },
@@ -223,6 +246,23 @@ async function callCodex(bin: string, prompt: string) {
   }
 }
 
+/** Spreads calls across a provider's keys and moves on when one is limited or rejected. */
+async function callWithKeys(provider: ApiProvider, prompt: string) {
+  const keys = keysFor(provider);
+  const start = rotation++ % keys.length;
+  let failure: unknown;
+  for (let i = 0; i < keys.length; i++)
+    try {
+      return await callApi(provider, keys[(start + i) % keys.length], prompt);
+    } catch (error) {
+      failure = error;
+      // Only key-specific failures are worth retrying with another key.
+      if (!/HTTP (401|403|429|5dd)/.test(String((error as Error)?.message)))
+        break;
+    }
+  throw failure;
+}
+
 /** Tries each available writer in order and returns the first answer. */
 export async function writeText(prompt: string) {
   const errors: string[] = [];
@@ -230,7 +270,7 @@ export async function writeText(prompt: string) {
     try {
       const api = apiProviders.find((p) => p.id === id);
       const text = api
-        ? await callApi(api, keyFor(api)!, prompt)
+        ? await callWithKeys(api, prompt)
         : id === "claude-code"
           ? await runCli(
               claudeCodePath()!,

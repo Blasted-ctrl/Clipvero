@@ -28,7 +28,8 @@
     "format:check": "prettier --check .",
     "mascot:cutout": "node -e \"require('child_process').spawnSync(process.platform==='win32'?'.tools/voice-venv/Scripts/python.exe':'.tools/voice-venv/bin/python',['scripts/voice/cutout.py',...process.argv.slice(1)],{stdio:'inherit'})\"",
     "ideas:index": "tsx --env-file-if-exists=.env scripts/ideas-index.ts",
-    "owner:credits": "tsx --env-file-if-exists=.env scripts/owner-credits.ts"
+    "owner:credits": "tsx --env-file-if-exists=.env scripts/owner-credits.ts",
+    "voice:samples": "tsx --env-file-if-exists=.env scripts/voice-samples.ts"
   },
   "dependencies": {
     "@clipvero/shared-types": "workspace:*",
