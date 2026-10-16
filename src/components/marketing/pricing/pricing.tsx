@@ -129,6 +129,8 @@ export function PlanCards({
 
 const base: CreateInput = {
   title: "Example",
+  style: "classic",
+  visual: "grid",
   mode: "prompt",
   content: "Example",
   duration: 45,

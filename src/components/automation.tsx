@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { PageHeading } from "./common";
 import { SocialConnections, useSocialStatus } from "./social-connections";
+import { AutopilotPanel } from "./autopilot-panel";
 
 export function AutomationPage() {
   const client = useQueryClient(),
@@ -100,6 +101,7 @@ export function AutomationPage() {
           its output in Projects.
         </p>
       </section>
+      <AutopilotPanel />
       <SocialConnections />
       <section className="panel settings-panel">
         <h2>Connect with MCP</h2>
@@ -207,7 +209,7 @@ export function AutomationPage() {
                 value={runLimit}
                 onChange={(event) => setRunLimit(event.target.value)}
               >
-                {[1, 3, 5, 8].map((count) => (
+                {[1, 3, 5, 8, 15, 25, 50].map((count) => (
                   <option key={count} value={count}>
                     {count} {count === 1 ? "video · guided run" : "videos"}
                   </option>

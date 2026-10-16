@@ -35,3 +35,12 @@ Thumbs.db
 .idea/
 .vscode/
 .turbo/
+
+# Third-party reference videos for style analysis; never commit.
+src/references/
+
+# Owner reference library (PDFs, notes, links) for topic ideas; never commit.
+/ideas/
+
+# Owner-supplied mascot artwork stays out of the public repository.
+/public/mascots/default.png

@@ -42,6 +42,7 @@ export type AppState = {
   pipelineErrors: { id: string; error: string }[];
   capabilities: {
     ai: boolean;
+    writer: boolean;
     worker: boolean;
     billing: boolean;
     publishing: boolean;

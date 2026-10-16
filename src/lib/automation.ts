@@ -4,8 +4,8 @@ import { publishingPolicySchema, type PublishingPolicy } from "./social";
 
 export const grantSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  runLimit: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(8)]),
-  creditLimit: z.number().int().min(1).max(1200),
+  runLimit: z.number().int().min(1).max(200),
+  creditLimit: z.number().int().min(1).max(5000),
   expiresHours: z.number().int().min(1).max(168).default(24),
   publishing: publishingPolicySchema.optional(),
 });

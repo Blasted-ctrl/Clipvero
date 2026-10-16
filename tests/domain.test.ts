@@ -4,6 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "clipvero-test-"));
+// Tests cover the no-credentials path, so the local Claude Code writer is off.
+process.env.CLAUDE_BIN = "none";
+process.env.CODEX_BIN = "none";
+// Ignore API keys from the machine environment.
+process.env.CLIPVERO_TEXT_PROVIDERS = "none";
+process.env.CLIPVERO_VOICE_PROVIDERS = "local";
 const { db, one, run } = await import("../src/server/db");
 const { hashPassword, verifyPassword, register } =
   await import("../src/server/auth");
@@ -17,8 +23,14 @@ const {
   getAsset,
   listAssets,
 } = await import("../src/server/projects");
-const { enqueue, claimJob, finishJob, recoverExpiredJobs, recordRenderResult } =
-  await import("../src/server/jobs");
+const {
+  enqueue,
+  claimJob,
+  finishJob,
+  recoverExpiredJobs,
+  recordRenderResult,
+  retryJob,
+} = await import("../src/server/jobs");
 const { createPipeline, runPipeline, getPipeline } =
   await import("../src/server/pipelines");
 function workspace(email: string) {
@@ -259,5 +271,37 @@ test("staged render artifacts are hidden until successful job completion", () =>
       assert.equal(getAsset(ws, assetId).id, assetId);
       assert.equal(getProject(ws, p.id).status, "review");
     }
+  }
+});
+
+test("retry resumes a saved single video but preserves multi-clip generation", () => {
+  process.env.OPENAI_API_KEY = "test-only-provider-fixture-never-called";
+  try {
+    for (const mode of ["script", "clips"] as const) {
+      const config = createSchema.parse({
+        ...input,
+        mode,
+        clipCount: 2,
+        sourceAssetId: mode === "clips" ? crypto.randomUUID() : undefined,
+      });
+      const original = enqueue(ws, "generate", `retry-${mode}`, null, config);
+      const claimed = claimJob()!;
+      assert.equal(claimed.id, original.id);
+      const project = insertProject(ws, input);
+      run("UPDATE jobs SET project_id=? WHERE id=?", project.id, original.id);
+      finishJob(
+        { ...claimed, projectId: project.id },
+        "Test-only interrupted generation",
+      );
+      const retried = retryJob(ws, original.id, `retry-${mode}-next`);
+      assert.equal(retried.kind, mode === "clips" ? "generate" : "render");
+      if (mode === "clips") {
+        assert.equal(retried.projectId, null);
+        assert.equal(JSON.parse(retried.input).clipCount, 2);
+      } else assert.equal(retried.projectId, project.id);
+      finishJob(claimJob()!, "Test cleanup");
+    }
+  } finally {
+    delete process.env.OPENAI_API_KEY;
   }
 });

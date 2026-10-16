@@ -11,6 +11,7 @@ import { AppError, requireValue } from "./errors";
 import { checkProviders, enqueue, finishJob, getJob } from "./jobs";
 import { getAsset, getProject, insertProject, renderCost } from "./projects";
 import { appUrl, requirePilotWorkspace } from "./auth";
+import { scriptIssues, scriptStyleGuide } from "@/lib/script-style";
 import { batchPublications, validatePublishingPolicy } from "./social";
 
 export type Grant = AgentGrant & { workspaceId: string };
@@ -129,6 +130,15 @@ function validateInput(workspace: string, input: CreateInput) {
       "Agent batches currently accept scripts, prompts, stories, explainers, marketing and character videos.",
     );
   if (input.sourceAssetId) getAsset(workspace, input.sourceAssetId);
+  if (input.mascotAssetId) getAsset(workspace, input.mascotAssetId);
+  if (["script", "gameplay"].includes(input.mode)) {
+    const issues = scriptIssues(input.content);
+    if (issues.length)
+      throw new AppError(
+        422,
+        `Rewrite this script so it sounds human-written. ${scriptStyleGuide} Problems: ${issues.slice(0, 5).join("; ")}`,
+      );
+  }
   for (const id of input.characterIds)
     requireValue(
       one(

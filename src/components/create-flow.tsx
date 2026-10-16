@@ -23,11 +23,13 @@ import {
   estimateCost,
   modes,
   voices,
+  isLocalVoice,
   type Mode,
   type Project,
 } from "@/lib/model";
 import { api, useAction, useApp, useNotify } from "./app-provider";
 import { Button } from "./ui/button";
+import { dsaReels, dsaReelInput } from "@/lib/dsa-reels";
 export const modeIcons = {
   sparkles: Sparkles,
   text: FileText,
@@ -50,25 +52,57 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
     ),
     [voice, setVoice] = useState("none"),
     [images, setImages] = useState(false),
+    [look, setLook] = useState<"classic" | "explainer" | "conversation">(
+      "classic",
+    ),
     [source, setSource] = useState(""),
     [characterIds, setCharacterIds] = useState<string[]>([]);
+  const [lesson, setLesson] = useState("");
+  const [seconds, setSeconds] = useState(30);
+  const [aspect, setAspect] = useState("9:16");
+  const prepared = lesson ? dsaReelInput(lesson) : null;
   const selected = modes.find((m) => m.id === mode),
-    ai = Boolean(selected?.ai || voice !== "none" || images);
+    ai = Boolean((selected?.ai && !prepared) || voice !== "none" || images),
+    // Free local voices run without an API key.
+    needsKey = Boolean(
+      (selected?.ai && !prepared && !data?.capabilities.writer) ||
+      mode === "clips" ||
+      images ||
+      (voice !== "none" && !isLocalVoice(voice)),
+    );
   const videos = data?.assets.filter((a) => a.kind === "video") || [];
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
     try {
+      const content = String(
+        f.get("content") || "Find complete, coherent speech segments.",
+      ).trim();
+      const paragraphs = content
+        .split(/\n\s*\n/)
+        .map((text) => text.trim())
+        .filter(Boolean);
+      if (prepared && paragraphs.length !== prepared.beats!.length)
+        throw new Error(
+          `This storyboard has ${prepared.beats!.length} beats. Keep one paragraph per beat so each diagram stays with its narration.`,
+        );
       const input = createSchema.parse({
         title: f.get("title"),
-        mode,
-        content: f.get("content") || "Find complete, coherent speech segments.",
+        mode: prepared ? "script" : mode,
+        content: prepared ? paragraphs.join("\n\n") : content,
+        beats: prepared?.beats?.map((beat, i) => ({
+          ...beat,
+          text: paragraphs[i],
+        })),
         duration: Number(f.get("duration")),
         aspect: f.get("aspect"),
         voice,
         tone: f.get("tone"),
         language: f.get("language"),
         generateImages: images,
+        style: look,
+        visual: f.get("visual") || "grid",
+        mascotAssetId: f.get("mascotAssetId") || undefined,
         sourceAssetId: source || undefined,
         characterIds,
         presetId: f.get("presetId") || undefined,
@@ -119,7 +153,14 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
           </p>
         </div>
         {mode && !autopilot && (
-          <Button variant="ghost" onClick={() => setMode(null)}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setMode(null);
+              setLesson("");
+              setLook("classic");
+            }}
+          >
             <ArrowLeft size={16} />
             All formats
           </Button>
@@ -180,7 +221,7 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
           </div>
         </>
       ) : (
-        <form className="creation-layout" onSubmit={submit}>
+        <form key={lesson} className="creation-layout" onSubmit={submit}>
           <div className="panel creation-form">
             <div className="selected-format">
               <span className="mode-icon">
@@ -194,6 +235,60 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
                 {ai ? "AI-assisted" : "You’re in control"}
               </span>
             </div>
+            {mode === "explainer" && !autopilot && (
+              <label>
+                Lesson storyboard
+                <select
+                  value={lesson}
+                  onChange={(e) => {
+                    setLesson(e.target.value);
+                    if (e.target.value) {
+                      setVoice("free-cute");
+                      setLook("explainer");
+                      setImages(false);
+                      setSource("");
+                      setAspect("9:16");
+                      setSeconds(90);
+                    }
+                  }}
+                >
+                  <option value="">Write from my topic</option>
+                  {dsaReels.map((reel) => (
+                    <option key={reel.id} value={reel.id}>
+                      {reel.title}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  {lesson
+                    ? dsaReels.find((r) => r.id === lesson)?.summary
+                    : "Start with a supplied lesson or write from your own source material."}
+                </small>
+                {lesson && (
+                  <small>
+                    Includes persistent diagrams, Python examples and local
+                    narration. You can edit the words; keep one paragraph per
+                    beat. Diagrams stay unchanged, so review them against your
+                    edits.
+                  </small>
+                )}
+              </label>
+            )}
+            {prepared && (
+              <div className="muted">
+                Review the lesson against its sources:{" "}
+                {dsaReels
+                  .find((reel) => reel.id === lesson)
+                  ?.sources.map((url, i) => (
+                    <span key={url}>
+                      {i > 0 ? ", " : ""}
+                      <a href={url} target="_blank" rel="noreferrer">
+                        Python documentation {i + 1}
+                      </a>
+                    </span>
+                  ))}
+              </div>
+            )}
             {autopilot && (
               <label>
                 Creation format
@@ -217,6 +312,7 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
               {autopilot ? "Autopilot name" : "Project name"}
               <input
                 name="title"
+                defaultValue={prepared?.title}
                 required
                 maxLength={120}
                 placeholder={
@@ -225,17 +321,18 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
               />
             </label>
             <label>
-              {mode === "script" || mode === "gameplay"
+              {prepared || mode === "script" || mode === "gameplay"
                 ? "Your script"
                 : mode === "marketing"
                   ? "Approved product information & campaign goal"
                   : mode === "explainer"
-                    ? "Topic & verified source material"
+                    ? "Topic & source material"
                     : mode === "clips"
                       ? "Notes for your review (optional)"
                       : "What’s the story?"}
               <textarea
                 name="content"
+                defaultValue={prepared?.content}
                 rows={7}
                 required={mode !== "clips"}
                 maxLength={12000}
@@ -281,8 +378,12 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
             <div className="form-grid three">
               <label>
                 Duration
-                <select name="duration" defaultValue="30">
-                  {[5, 15, 30, 60, 90].map((n) => (
+                <select
+                  name="duration"
+                  value={seconds}
+                  onChange={(e) => setSeconds(Number(e.target.value))}
+                >
+                  {[5, 15, 30, 60, 90, 120, 150].map((n) => (
                     <option key={n} value={n}>
                       {n} seconds
                     </option>
@@ -291,10 +392,18 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
               </label>
               <label>
                 Aspect ratio
-                <select name="aspect" defaultValue="9:16">
+                <select
+                  name="aspect"
+                  value={aspect}
+                  onChange={(e) => setAspect(e.target.value)}
+                >
                   <option value="9:16">9:16 · Vertical</option>
-                  <option value="1:1">1:1 · Square</option>
-                  <option value="16:9">16:9 · Landscape</option>
+                  <option value="1:1" disabled={look === "explainer"}>
+                    1:1 · Square
+                  </option>
+                  <option value="16:9" disabled={look === "explainer"}>
+                    16:9 · Landscape
+                  </option>
                 </select>
               </label>
               <label>
@@ -319,14 +428,84 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
                     <option value={v} key={v}>
                       {v === "none"
                         ? "No AI narration"
-                        : v[0].toUpperCase() + v.slice(1)}
+                        : v.startsWith("free-")
+                          ? `Free voice · ${v.slice(5)}`
+                          : v[0].toUpperCase() + v.slice(1)}
                     </option>
                   ))}
                 </select>
                 <small>
-                  AI voices are synthetic. You can also upload your own audio.
+                  AI voices are synthetic. Free voices run on this computer and
+                  need no API key.
                 </small>
               </label>
+              <label>
+                Look
+                <select
+                  value={look}
+                  onChange={(e) => {
+                    setLook(
+                      e.target.value as
+                        "classic" | "explainer" | "conversation",
+                    );
+                    if (e.target.value === "conversation") {
+                      setImages(false);
+                      setAspect("9:16");
+                    }
+                    if (e.target.value === "explainer") {
+                      setImages(false);
+                      setSource("");
+                      setAspect("9:16");
+                    }
+                  }}
+                >
+                  <option value="classic" disabled={!!prepared}>
+                    Classic captions
+                  </option>
+                  <option
+                    value="explainer"
+                    disabled={mode === "clips" || mode === "gameplay"}
+                  >
+                    Animated explainer with mascot
+                  </option>
+                  <option
+                    value="conversation"
+                    disabled={
+                      !!prepared ||
+                      ["script", "gameplay", "clips"].includes(mode)
+                    }
+                  >
+                    Two hosts talking it through
+                  </option>
+                </select>
+              </label>
+              {look === "explainer" && (
+                <>
+                  <label>
+                    Background
+                    <select name="visual">
+                      <option value="grid">Subtle grid</option>
+                      <option value="complexity">Big O growth chart</option>
+                    </select>
+                  </label>
+                  <label>
+                    Mascot
+                    <select name="mascotAssetId">
+                      <option value="">Clipvero guide (default)</option>
+                      {data?.assets
+                        .filter((a) => a.kind === "image")
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                    </select>
+                    <small>
+                      Use a transparent PNG you own or have licensed.
+                    </small>
+                  </label>
+                </>
+              )}
               <label>
                 Tone
                 <select name="tone">
@@ -356,9 +535,12 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
             <label>
               {mode === "clips"
                 ? "Source footage"
-                : "Background footage (optional)"}
+                : look === "conversation"
+                  ? "Background gameplay (your recording)"
+                  : "Background footage (optional)"}
               <select
                 required={mode === "clips" || mode === "gameplay"}
+                disabled={look === "explainer"}
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
               >
@@ -396,6 +578,7 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
                   type="checkbox"
                   checked={images}
                   onChange={(e) => setImages(e.target.checked)}
+                  disabled={look === "explainer"}
                 />
                 <span>
                   Generate original scene illustrations
@@ -477,7 +660,7 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
                 footage, and voices.
               </span>
             </label>
-            {ai && !data?.capabilities.ai && (
+            {needsKey && !data?.capabilities.ai && (
               <p className="notice">
                 AI creation needs a server API key.{" "}
                 <Link href="/help">See setup instructions</Link>. You can save
@@ -493,7 +676,9 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
                 Cancel
               </Button>
               <Button
-                disabled={busy || (ai && !data?.capabilities.ai && !autopilot)}
+                disabled={
+                  busy || (needsKey && !data?.capabilities.ai && !autopilot)
+                }
                 type="submit"
               >
                 {autopilot ? <Workflow size={16} /> : <Sparkles size={16} />}
@@ -540,7 +725,7 @@ export function CreateFlow({ autopilot = false }: { autopilot?: boolean }) {
             <div className="summary-credits">
               <Sparkles size={15} />
               {ai
-                ? `Estimated ${estimateCost(createSchema.parse({ title: "Estimate", mode, content: "Estimate", voice, generateImages: images, rightsConfirmed: true }))} credits`
+                ? `Estimated ${estimateCost(createSchema.parse({ title: "Estimate", mode: prepared ? "script" : mode, content: "Estimate", duration: seconds, voice, generateImages: images, rightsConfirmed: true }))} credits`
                 : "Editing is free · render from 1 credit"}
             </div>
             <LinkHelp />

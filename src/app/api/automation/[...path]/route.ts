@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireIdentity, checkOrigin, rateLimit } from "@/server/auth";
 import { createGrant, listGrants, revokeGrant } from "@/server/automation";
+import { startContentRun } from "@/server/autopilot";
 import { agentBoundary, agentJson, agentError } from "@/server/agent-http";
 
 export const runtime = "nodejs";
@@ -27,6 +28,13 @@ async function handle(
           { status: 201, headers: { "Cache-Control": "no-store" } },
         );
       }
+    }
+    if (path.join("/") === "runs" && request.method === "POST") {
+      rateLimit(`autopilot:${me.workspaceId}`, 6, 3600000);
+      return Response.json(
+        await startContentRun(me.workspaceId, await agentJson(request)),
+        { status: 201, headers: { "Cache-Control": "no-store" } },
+      );
     }
     if (
       path[0] === "grants" &&

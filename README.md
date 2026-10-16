@@ -20,6 +20,23 @@ Open **http://localhost:3000**, create an account and choose **Script to video**
 
 New accounts receive 120 trial credits once. A manual render costs one credit per minute, rounded up; failed jobs refund reserved credits. The ignored `data/` directory holds this studio's database, uploads and exports. Keep it on persistent local storage and back it up.
 
+## Make a narrated DSA lesson without an API key
+
+In **Create → Educational explainer → Lesson storyboard**, choose **Hash maps**, **Binary search**, or **Stacks and queues**. Each includes an original script, animated diagrams and Python examples. Review the script, keep one paragraph per beat, confirm your content rights, and choose **Generate video**. The worker creates local narration, timed captions and an MP4 that waits for review. Changing the words does not automatically redesign the diagrams; check that they still agree.
+
+The explainer look uses a vertical canvas, a dark background, one accent color, persistent diagrams, animated entrances, camera moves and white captions with the spoken word highlighted. The lessons use playful running examples: anime contacts, a gaming-lobby search, and undo history versus a boba queue. In the editor, select a scene to adjust **Camera framing**, **Narrator position**, or an optional **Reaction caption**. Preview and export use the same timeline. Background footage and generated scene images belong to the Classic look.
+
+Free voices need a separate Python 3.12 environment. With [uv](https://docs.astral.sh/uv/) installed, run these PowerShell commands once:
+
+```powershell
+uv venv --python 3.12 .tools/voice-venv
+uv pip install --python .tools/voice-venv/Scripts/python.exe "kokoro==0.9.4" soundfile
+```
+
+The first voice run downloads the model and voice files; later runs reuse cached files. One model instance speaks all scenes in a video. **Free voice · cute** is the voice used for these lessons. Warm and deep voices are also available. Narrated explainer exports adjust the complete audio mix toward −16 LUFS with a −1.5 dB true-peak limit. Initial setup needs internet access and local narration takes processing time. `VOICE_PYTHON` can point to another compatible Python executable. On Linux, the default path is `.tools/voice-venv/bin/python`.
+
+An agent can supply its own script and typed `beats` through `clipvero_create_batch`: use `mode: "script"`, `style: "explainer"`, `voice: "free-cute"`, and `aspect: "9:16"`. Join beat texts with blank lines to form `content`. Each beat has a fixed `visual`, an optional shared `panel` ID, and optional display-only `code`. Adjacent beats with the same panel ID and visual type keep their diagram on screen. Optional `presentation` sets `camera` (`wide` or `close`), `mascotSide` (`left` or `right`), and `reaction` (up to 24 characters). These supplied storyboards need neither an OpenAI key nor the local script writer.
+
 ## Fill in your .env
 
 ### 1. Generate the application secrets
@@ -53,7 +70,7 @@ OPENAI_IMAGE_MODEL=gpt-image-2
 
 These settings are consumed by the Node video worker. They enable its provider requests for scripts, narration, images and transcription; requests still depend on your account's model access and limits. The image adapter explicitly requests PNG output. Existing `.env` files retain their model setting, so replace `gpt-image-1` if it is still configured: OpenAI lists it for retirement on October 23, 2026. See the [official deprecations](https://developers.openai.com/api/docs/deprecations) and [image model documentation](https://developers.openai.com/api/docs/models/gpt-image-2).
 
-Stop and restart `pnpm dev:all` after editing the file so the website and worker reload the key. Agent batches can request narration for an unchanged supplied script; the studio's manual script form does not expose that option yet. ElevenLabs and several advanced formats still require implementation; extra environment names will not enable them.
+Stop and restart `pnpm dev:all` after editing the file so the website and worker reload the key. The creation form and agent batches can request narration for an unchanged supplied script. Free local voices work without this key; paid provider voices use it. ElevenLabs and several advanced formats still require implementation; extra environment names will not enable them.
 
 ### 3. Connect Stripe subscriptions
 
@@ -155,7 +172,7 @@ The Compose services now honor `ENVIRONMENT`; production FastAPI startup require
 
 Use the Node studio (`CLIPVERO_BACKEND=legacy`) for this workflow. The PostgreSQL Compose deployment does not expose these operations yet.
 
-1. Your connected agent can write a complete script and send it as mode `script`, voice `none`, with images disabled. This renders without an OpenAI key. Add an API key only if you want the background worker to generate scripts, narration or images itself. A chat subscription does not provide API credentials to the worker; use an uploaded recording for narration without an API provider.
+1. Your connected agent can write a complete script and send it as mode `script`, with images disabled. Choose `voice: "none"` for captions only, or `voice: "free-cute"` after installing the local voice environment above. Both work without an OpenAI key. Paid provider generation needs its own credentials; a chat subscription does not supply those credentials to the worker.
 2. Open **Automation** in the sidebar. Connect your publishing accounts after completing the account setup below.
 3. Choose **Connect an agent**. Start with **1 video**, a credit allowance and an expiry. Select the destination accounts and local start/end times. The saved schedule uses UTC instants; elapsed minutes determine spacing across daylight-saving changes. The guided video always needs your review.
 4. Save the one-time token in your MCP client's private settings. An HTTP MCP client uses `https://YOUR_DOMAIN/api/mcp` with `Authorization: Bearer YOUR_TOKEN`. For a stdio client, launch `pnpm --silent --dir C:/Users/kings/Clipvero agent:mcp` with `CLIPVERO_URL` and `CLIPVERO_AGENT_TOKEN` in its environment. The bridge forwards requests to your website. Clients must support Bearer HTTP or stdio; OAuth connector discovery is not implemented.
@@ -163,6 +180,8 @@ Use the Node studio (`CLIPVERO_BACKEND=legacy`) for this workflow. The PostgreSQ
 6. Once that run works, issue a **new** allowance for **3**, then **5**, then **8** videos. These are lifetime limits across all requests with that token. Automatic approval applies to Instagram within your destinations, window and spacing. **Every TikTok video requires review, audience selection and consent in Clipvero.** Agents cannot increase limits or approve TikTok posts.
 
 Agents can create supported script, prompt, story, character, explainer and marketing jobs and read their own results. Source clipping/gameplay batches are rejected so one job cannot evade the video allowance. Failed attempts still count against that token's allowance; job refunds return credits to the workspace. Internal credits are a fixed processing tariff, not a dollar cap on your provider's bill. Inspect usage and control provider spending separately.
+
+**Reuse the same agent token for multiple videos until its allowance, credit budget or expiry is reached.** A one-video grant intentionally stops after one attempt; it is not a separate login token required for every video. A larger owner-issued allowance supports multiple requests. Agents cannot extend their own authorization.
 
 The website, video worker and publisher must share persistent `DATA_DIR`, `APP_URL` and stable `SESSION_SECRET`. `pnpm dev:all` runs all three locally; separate processes use `pnpm dev`, `pnpm worker` and `pnpm publisher`. The render Dockerfile can also run the publisher with `pnpm exec tsx scripts/publisher.ts`. Keep one durable volume on one host for this personal workflow. SQLite is not a distributed multi-host queue.
 

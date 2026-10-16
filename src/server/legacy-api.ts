@@ -32,6 +32,7 @@ import {
   saveProject,
 } from "@/server/projects";
 import { enqueue, listJobs, retryJob } from "@/server/jobs";
+import { localWriterPath } from "@/server/local-writer";
 import {
   createPipeline,
   getPipeline,
@@ -144,6 +145,7 @@ export async function handle(request: Request, context: Context) {
           .filter((p) => p.error),
         capabilities: {
           ai: Boolean(process.env.OPENAI_API_KEY),
+          writer: Boolean(process.env.OPENAI_API_KEY || localWriterPath()),
           billing: Boolean(
             process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET,
           ),

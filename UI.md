@@ -1,5 +1,9 @@
 # Clipvero visual and interaction specification
 
+Educational reel motion: show the actual objects promised by the hook; stagger list/contact entrances, move highlights between search steps, and crossfade or slide between topics. Keep code and diagrams anchored across related beats. Center diagram headings; omit chapter HUD labels. Move the narrator between the lower corners while the code occupies the opposite side, with captions below both. The editor provides per-scene Camera framing, Narrator position and optional Reaction caption controls. Playful lessons use a running joke with factual caveats, rather than unrelated meme inserts.
+
+Persistent code panels emphasize the active statement at 28px on the 720px canvas and wrap it instead of shrinking it. Context lines remain secondary. Keep the entire panel above the caption region and opposite the narrator; verify the longest active statement at phone size.
+
 ## Foundation migration surface
 
 Current priority: the working Node studio's Automation destination shows real agent allowances, lifetime videos/credits, expiry/revocation, connected accounts, publisher availability and per-platform queues. Issue tokens through an owner-only dialog and show the secret once without browser persistence. Default to one guided video; later 3/5/8 allowances and Instagram automatic approval require deliberate owner choices. Collect destination IDs, local start/end times and spacing; persist UTC instants. Configuration errors retain form input.
@@ -55,6 +59,8 @@ Help a creator move from an idea to a reviewable video. Use a compact production
 Use Inter/Geist where installed, then Segoe UI/Arial. Do not depend on an external font request. Media compositions use Arial in both preview and export. Use Geist Mono/Consolas for identifiers and frame counts. Sizes: 28–30px page titles, 16px sections, 14px body, 11–12px controls, 9–10px secondary metadata. Essential instructions never live only in tiny metadata. Use 4px spacing increments, 8px panel radii, 6px controls, 4px badges, and 36px desktop gutters.
 
 ## Shared components and navigation
+
+Educational explainers offer three supplied lesson storyboards: hash maps, binary search, and stacks versus queues. Selecting one fills editable narration, chooses the local cute voice and the vertical explainer look, and disables incompatible footage/images/aspect controls. Keep one paragraph per beat and explain that changing words does not change its diagram. Video styling uses near-black with a topic accent, small step labels, persistent code/diagram panels, and bottom white captions with a white active-word box. The mascot stays clear of captions and code. No chapter counters or invented performance measurements. Narration and rendered output still require owner review.
 
 Primary button backgrounds use #7C3AED with #8050E5 on hover so white action labels meet contrast requirements. The requested #8B5CF6 remains the brand/selection accent. Inline authentication links are underlined as well as colored.
 
@@ -134,6 +140,10 @@ Actual credits, trial or reconciled paid plan, subscription state, ledger. Start
 Edit names, display email, manage creator presets. Presets save caption colors/size/position plus voice/tone/audience preferences. Current timeline applies visual preset settings; creation explicitly chooses voice/tone. Connections distinguish worker online, configured AI, unavailable social. Help gives first-video, worker, AI, content-rights, and privacy instructions. No message is sent externally. Teams, password changes/recovery, deletion, and legal pages remain release work.
 
 ## Responsive and accessibility rules
+
+Educational reels retain an anchored diagram, near-black background and one accent per lesson. ByteTheory branding stays top-left, the narrator stays clear of the diagram and cost panel, and white active-word captions occupy their own bottom region. Show the objects promised by the hook immediately. Update existing objects as the explanation advances: move a pointer, follow a link, fill a pair grid or replace a value. A new sentence is not a reason to rebuild the whole stage. Avoid flashing reactions, decorative particles, unrelated cutaways and repeated entrances.
+
+The persistent cost panel separates the illustrated sample from larger modeled inputs, names the counted operation and labels assumptions such as sorted input or average hash behavior. All five growth classes remain visible with the active one highlighted. Miniature curves disclose their separate scales; comparisons that teach doubling keep a shared domain. Code, captions, narrator and cost occupy distinct safe regions. Frame-driven motion and cue-driven counts are shared by preview and export. Editorial review uses full-video samples every two seconds plus denser samples around transitions; remaining deficiencies belong in the local iteration record.
 
 - 1450px+: up to 1600px content; expanded editor properties.
 - 1000–1449px: denser panels, two-column mode grid under 1200px.

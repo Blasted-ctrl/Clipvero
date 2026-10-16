@@ -9,10 +9,16 @@ import {
   createSchema,
   scriptTimeline,
   timelineSchema,
+  applyStyle,
+  isLocalVoice,
   type Character,
+  type Visual,
   type CreateInput,
+  type Scene,
 } from "../lib/model";
 import { renderProject } from "./render";
+import { speakScenes } from "../server/voice-router";
+import { localDialogue, localScript } from "../server/local-writer";
 
 export async function generate(job: JobRow, provider: AIProvider = openAI) {
   const input = createSchema.parse(JSON.parse(job.input));
@@ -35,22 +41,123 @@ export async function generate(job: JobRow, provider: AIProvider = openAI) {
         scenes: input.content.split(/\n\s*\n/).filter(Boolean),
         usage: {},
       }
-    : await provider.script(input, JSON.stringify(characters));
+    : // The text router prefers API keys and falls back to local agent CLIs.
+      provider === openAI
+      ? input.style === "conversation"
+        ? await localDialogue(input)
+        : await localScript(input, JSON.stringify(characters))
+      : await provider.script(input, JSON.stringify(characters));
   if (!suppliedScript) usage(job, "text_generation", 1, result.usage);
+  // The local writer also plans a visual and chapter for each beat.
+  const plan = result as {
+    topic?: string;
+    speakers?: number[];
+    beats?: {
+      chapter: string | null;
+      visual: Visual | null;
+      panel?: string | null;
+      code?: Scene["code"];
+      presentation?: Scene["presentation"];
+      cost?: Scene["cost"];
+    }[];
+  };
   const timeline = scriptTimeline(
     result.scenes.join("\n\n"),
     input.aspect,
     input.duration,
   );
+  if (plan.beats?.length === timeline.scenes.length)
+    plan.beats.forEach((beat, i) => {
+      timeline.scenes[i].visual = beat.visual;
+      timeline.scenes[i].chapter = beat.chapter;
+      timeline.scenes[i].panel = beat.panel ?? null;
+      timeline.scenes[i].code = beat.code ?? null;
+      timeline.scenes[i].presentation = beat.presentation ?? null;
+      timeline.scenes[i].cost = beat.cost ?? null;
+    });
+  if (plan.topic) timeline.topic = plan.topic.slice(0, 32);
+  // Conversations alternate hosts; the dialogue writer says exactly who speaks.
+  const conversation = input.style === "conversation";
+  if (conversation)
+    timeline.scenes.forEach((scene, i) => {
+      scene.speaker =
+        plan.speakers?.length === timeline.scenes.length
+          ? plan.speakers[i]
+          : i % 2;
+    });
+  const hostVoices = [
+    isLocalVoice(input.voice) ? input.voice : "free-cute",
+    "free-deep",
+  ];
   const reference = characters.find(
     (c) => c.referenceAssetId,
   )?.referenceAssetId;
   const referencePath = reference
     ? resolve(dataDir, "assets", getAsset(job.workspaceId, reference).filename)
     : undefined;
+  let localNarration: Awaited<ReturnType<typeof speakScenes>> | undefined;
+  const routedVoice = isLocalVoice(input.voice) || conversation;
+  if (routedVoice) {
+    stage(job.id, `Recording narration · ${timeline.scenes.length} scenes`);
+    if (conversation) {
+      // Each host keeps one voice for the whole video.
+      localNarration = new Array(timeline.scenes.length);
+      for (const host of [0, 1]) {
+        const lines = timeline.scenes
+          .map((scene, i) => ({ scene, i }))
+          .filter(({ scene }) => scene.speaker === host);
+        if (!lines.length) continue;
+        const spoken = await speakScenes(
+          lines.map(({ scene }) => scene.script),
+          hostVoices[host],
+        );
+        lines.forEach(({ i }, k) => (localNarration![i] = spoken[k]));
+      }
+    } else
+      localNarration = await speakScenes(
+        timeline.scenes.map((scene) => scene.script),
+        input.voice,
+      );
+  }
   for (let i = 0; i < timeline.scenes.length; i++) {
     const scene = timeline.scenes[i];
-    if (input.voice !== "none") {
+    if (routedVoice) {
+      stage(
+        job.id,
+        `Saving narration · scene ${i + 1} of ${timeline.scenes.length}`,
+      );
+      const spoken = localNarration![i];
+      const audio = await storeMedia(
+        job.workspaceId,
+        spoken.audio,
+        "audio/mpeg",
+        `Narration ${i + 1}.mp3`,
+        spoken.provider === "kokoro"
+          ? `Synthetic speech generated locally with Kokoro-82M (Apache-2.0), voice ${conversation ? hostVoices[scene.speaker ?? 0] : input.voice}. No impersonation.`
+          : `Synthetic speech from ${spoken.provider}, persona ${conversation ? hostVoices[scene.speaker ?? 0] : input.voice}. No impersonation.`,
+      );
+      scene.narrationId = audio.id;
+      scene.durationFrames = Math.ceil((audio.duration! + 0.25) * 30);
+      scene.captions = spoken.words.map((w) => {
+        const from = Math.min(
+          scene.durationFrames - 1,
+          Math.round(w.start * 30),
+        );
+        return {
+          id: crypto.randomUUID(),
+          from,
+          to: Math.min(
+            scene.durationFrames,
+            Math.max(from + 1, Math.ceil(w.end * 30)),
+          ),
+          text: w.text,
+        };
+      });
+      usage(job, "speech_synthesis", scene.script.length, {
+        assetId: audio.id,
+        provider: spoken.provider,
+      });
+    } else if (input.voice !== "none") {
       stage(
         job.id,
         `Generating narration · scene ${i + 1} of ${timeline.scenes.length}`,
@@ -95,8 +202,10 @@ export async function generate(job: JobRow, provider: AIProvider = openAI) {
       );
       scene.assetId = image.id;
       usage(job, "image_generation", 1, { assetId: image.id });
-    } else if (input.sourceAssetId) scene.assetId = input.sourceAssetId;
+    } else if (input.sourceAssetId && !conversation)
+      scene.assetId = input.sourceAssetId;
   }
+  applyStyle(timeline, input);
   timelineSchema.parse(timeline);
   const project = insertProject(
     job.workspaceId,

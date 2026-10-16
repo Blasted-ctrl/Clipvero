@@ -1,6 +1,7 @@
 import { all, one, run, transaction } from "./db";
 import { AppError, requireValue } from "./errors";
 import {
+  applyStyle,
   createSchema,
   duration,
   scriptTimeline,
@@ -57,6 +58,11 @@ export function validateAssets(workspace: string, timeline: Timeline) {
     return asset;
   };
   if (timeline.musicAssetId) check(timeline.musicAssetId, ["audio"]);
+  if (timeline.mascotAssetId) check(timeline.mascotAssetId, ["image"]);
+  if (timeline.backgroundAssetId)
+    check(timeline.backgroundAssetId, ["video", "image"]);
+  for (const speaker of timeline.speakers)
+    if (speaker.assetId) check(speaker.assetId, ["image"]);
   timeline.scenes.forEach((s) => {
     if (s.assetId) {
       const asset = check(s.assetId, ["video", "image"]);
@@ -91,6 +97,7 @@ export function insertProject(
   const data = createSchema.parse(input);
   const model =
     timeline ?? scriptTimeline(data.content, data.aspect, data.duration);
+  if (!timeline) applyStyle(model, data);
   if (data.sourceAssetId && !timeline)
     model.scenes.forEach((s) => {
       s.assetId = data.sourceAssetId!;

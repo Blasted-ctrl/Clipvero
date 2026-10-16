@@ -1,7 +1,13 @@
 import { all, one, run, transaction } from "./db";
 import { AppError, requireValue } from "./errors";
-import { estimateCost, type CreateInput, type Job } from "../lib/model";
+import {
+  estimateCost,
+  isLocalVoice,
+  type CreateInput,
+  type Job,
+} from "../lib/model";
 import { getProject, renderCost } from "./projects";
+import { localWriterPath } from "./local-writer";
 import { pilotOwnerEmail, requirePilotWorkspace } from "./auth";
 
 export type JobRow = Job & {
@@ -35,7 +41,13 @@ export function listJobs(workspace: string) {
   );
 }
 export function checkProviders(input: CreateInput) {
-  if (!process.env.OPENAI_API_KEY)
+  // Scripts can be written by local Claude Code; images and paid voices need OpenAI.
+  const needsAI =
+    (!["script", "gameplay"].includes(input.mode) && !localWriterPath()) ||
+    input.mode === "clips" ||
+    input.generateImages ||
+    (input.voice !== "none" && !isLocalVoice(input.voice));
+  if (needsAI && !process.env.OPENAI_API_KEY)
     throw new AppError(
       503,
       "AI creation needs an OpenAI API key. Add OPENAI_API_KEY to .env and restart the web app and worker. Script videos work without a key.",
@@ -296,13 +308,26 @@ export function retryJob(workspace: string, id: string, key: string) {
   );
   if (job.state !== "failed")
     throw new AppError(409, "Only failed jobs can be retried.");
-  return enqueue(
-    workspace,
-    job.kind as "render" | "generate",
-    key,
-    job.kind === "generate" ? null : job.projectId,
-    job.kind === "generate" ? JSON.parse(job.input) : undefined,
-  );
+  return transaction(() => {
+    // A generate job that already created its project only needs a render.
+    const rerender =
+      job.kind === "render" ||
+      (!!job.projectId && JSON.parse(job.input).mode !== "clips");
+    const next = enqueue(
+      workspace,
+      rerender ? "render" : "generate",
+      key,
+      rerender ? job.projectId : null,
+      rerender ? undefined : JSON.parse(job.input),
+    );
+    // Keep an agent video linked to its retry so it is still planned for publishing.
+    run(
+      "UPDATE agent_batch_items SET job_id=? WHERE job_id=?",
+      next.id,
+      job.id,
+    );
+    return next;
+  });
 }
 export function usage(
   job: JobRow,

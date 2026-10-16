@@ -4,6 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "clipvero-agent-test-"));
+// Tests cover the no-credentials path, so the local Claude Code writer is off.
+process.env.CLAUDE_BIN = "none";
+process.env.CODEX_BIN = "none";
+// Ignore API keys from the machine environment.
+process.env.CLIPVERO_TEXT_PROVIDERS = "none";
+process.env.CLIPVERO_VOICE_PROVIDERS = "local";
 process.env.SESSION_SECRET = "test-only-social-encryption-secret-32-characters";
 process.env.APP_URL = "https://clipvero.example.test";
 delete process.env.OPENAI_API_KEY;

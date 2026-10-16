@@ -5,12 +5,15 @@
   "type": "module",
   "exports": {
     "./model": "./src/model.ts",
-    "./composition": "./src/composition.tsx"
+    "./composition": "./src/composition.tsx",
+    "./code-tokens": "./src/code-tokens.ts"
   },
   "dependencies": {
-    "zod": "^4.6.7",
+    "@code-hike/lighter": "1.0.3",
+    "@remotion/paths": "4.0.535",
+    "react": "^19.3.1",
     "remotion": "^4.0.535",
-    "react": "^19.3.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/react": "^19.3.0"

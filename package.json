@@ -25,7 +25,10 @@
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "types:api": "uv run python scripts/export_openapi.py && openapi-typescript packages/shared-types/openapi.json -o packages/shared-types/src/api.d.ts",
     "test:ui": "vitest run",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "mascot:cutout": "node -e \"require('child_process').spawnSync(process.platform==='win32'?'.tools/voice-venv/Scripts/python.exe':'.tools/voice-venv/bin/python',['scripts/voice/cutout.py',...process.argv.slice(1)],{stdio:'inherit'})\"",
+    "ideas:index": "tsx --env-file-if-exists=.env scripts/ideas-index.ts",
+    "owner:credits": "tsx --env-file-if-exists=.env scripts/owner-credits.ts"
   },
   "dependencies": {
     "@clipvero/shared-types": "workspace:*",

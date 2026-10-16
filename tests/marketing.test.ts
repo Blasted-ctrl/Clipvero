@@ -228,6 +228,8 @@ describe("content stays consistent with the product", () => {
   it("prices a standard video at 10 credits, as the pricing page states", () => {
     const standard = estimateCost({
       title: "t",
+      style: "classic",
+      visual: "grid",
       mode: "prompt",
       content: "c",
       duration: 60,

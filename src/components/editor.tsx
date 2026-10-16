@@ -37,6 +37,7 @@ import { foundationApi } from "@/lib/foundation-api";
 import {
   VideoComposition,
   type MediaMap,
+  builtinMedia,
 } from "@clipvero/video-engine/composition";
 import { api, useAction, useApp, useNotify } from "./app-provider";
 import { Button } from "./ui/button";
@@ -126,6 +127,15 @@ function LoadedEditor({
     state = useStore(store),
     { timeline, change, undo, redo } = state;
   const projectApi = foundation ? foundationApi : api;
+  // Built-in images that fail to load (such as an absent mascot file) are skipped.
+  const [missingBuiltin, setMissingBuiltin] = useState<string[]>([]);
+  useEffect(() => {
+    for (const [id, src] of Object.entries(builtinMedia)) {
+      const probe = new window.Image();
+      probe.onerror = () => setMissingBuiltin((ids) => [...ids, id]);
+      probe.src = src;
+    }
+  }, []);
   const { data } = useApp(foundation),
     { act, busy } = useAction(),
     notify = useNotify(),
@@ -166,12 +176,20 @@ function LoadedEditor({
       current.renderedRevision === savedRevision &&
       !dirty,
     );
-  const media: MediaMap = Object.fromEntries(
-    (data?.assets || []).map((a) => [
-      a.id,
-      { src: `/api/assets/${a.id}`, kind: a.kind },
-    ]),
-  );
+  const media: MediaMap = {
+    ...Object.fromEntries(
+      (data?.assets || []).map((a) => [
+        a.id,
+        { src: `/api/assets/${a.id}`, kind: a.kind },
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(builtinMedia)
+        // The owner's mascot isn't in the repository; skip images that don't load.
+        .filter(([id]) => !missingBuiltin.includes(id))
+        .map(([id, src]) => [id, { src, kind: "image" }]),
+    ),
+  };
   const save = useCallback(async (): Promise<boolean> => {
     if (pending.current) {
       const result = await pending.current;
@@ -510,7 +528,9 @@ function LoadedEditor({
           ) : tab === "assets" ? (
             <div className="editor-assets">
               <p className="muted">
-                Choose an image or video for the selected scene.
+                {timeline.style === "explainer"
+                  ? "This explainer uses animated diagrams. Background images and videos are available in Classic projects."
+                  : "Choose an image or video for the selected scene."}
               </p>
               {data?.assets
                 .filter((a) => ["image", "video"].includes(a.kind))
@@ -518,6 +538,7 @@ function LoadedEditor({
                   <button
                     key={a.id}
                     className={scene.assetId === a.id ? "selected" : ""}
+                    disabled={timeline.style === "explainer"}
                     onClick={() =>
                       updateScene({ assetId: a.id, mediaStart: 0 })
                     }
@@ -551,6 +572,7 @@ function LoadedEditor({
                 Aspect ratio
                 <select
                   value={timeline.aspect}
+                  disabled={timeline.style === "explainer"}
                   onChange={(e) =>
                     change((t) => {
                       t.aspect = e.target.value as Timeline["aspect"];
@@ -567,15 +589,24 @@ function LoadedEditor({
                 <input
                   type="range"
                   min={24}
-                  max={100}
-                  value={timeline.fontSize}
+                  max={timeline.style === "explainer" ? 42 : 100}
+                  value={
+                    timeline.style === "explainer"
+                      ? Math.min(42, timeline.fontSize)
+                      : timeline.fontSize
+                  }
                   onChange={(e) =>
                     change((t) => {
                       t.fontSize = Number(e.target.value);
                     })
                   }
                 />
-                <small>{timeline.fontSize}px</small>
+                <small>
+                  {timeline.style === "explainer"
+                    ? Math.min(42, timeline.fontSize)
+                    : timeline.fontSize}
+                  px
+                </small>
               </label>
               <label>
                 Caption color
@@ -604,7 +635,12 @@ function LoadedEditor({
               <label>
                 Caption position
                 <select
-                  value={timeline.captionPosition}
+                  value={
+                    timeline.style === "explainer"
+                      ? "bottom"
+                      : timeline.captionPosition
+                  }
+                  disabled={timeline.style === "explainer"}
                   onChange={(e) =>
                     change((t) => {
                       t.captionPosition = e.target
@@ -690,10 +726,70 @@ function LoadedEditor({
             <span className="badge">Properties</span>
           </div>
           <div className="editor-properties">
+            {timeline.style === "explainer" && (
+              <>
+                <label>
+                  Camera framing
+                  <select
+                    value={scene.presentation?.camera ?? "wide"}
+                    onChange={(e) =>
+                      updateScene({
+                        presentation: {
+                          camera: e.target.value as "wide" | "close",
+                          mascotSide: scene.presentation?.mascotSide ?? "left",
+                          reaction: scene.presentation?.reaction ?? null,
+                        },
+                      })
+                    }
+                  >
+                    <option value="wide">Wide</option>
+                    <option value="close">Close-up</option>
+                  </select>
+                </label>
+                <label>
+                  Narrator position
+                  <select
+                    value={scene.presentation?.mascotSide ?? "left"}
+                    onChange={(e) =>
+                      updateScene({
+                        presentation: {
+                          camera: scene.presentation?.camera ?? "wide",
+                          mascotSide: e.target.value as "left" | "right",
+                          reaction: scene.presentation?.reaction ?? null,
+                        },
+                      })
+                    }
+                  >
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+                <label>
+                  Reaction caption
+                  <input
+                    value={scene.presentation?.reaction ?? ""}
+                    maxLength={24}
+                    placeholder="Optional short callback"
+                    onChange={(e) =>
+                      updateScene({
+                        presentation: {
+                          camera: scene.presentation?.camera ?? "wide",
+                          mascotSide: scene.presentation?.mascotSide ?? "left",
+                          reaction: e.target.value || null,
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
             <label>
               Caption text
               <textarea
                 value={scene.caption}
+                disabled={
+                  timeline.style === "explainer" && Boolean(scene.narrationId)
+                }
                 rows={4}
                 maxLength={1600}
                 onChange={(e) =>
@@ -703,8 +799,9 @@ function LoadedEditor({
             </label>
             {scene.captions.length > 0 && (
               <small className="muted">
-                {scene.captions.length} timed caption segments. Editing caption
-                text replaces these with a scene-wide caption.
+                {timeline.style === "explainer" && scene.narrationId
+                  ? "Captions follow the generated voice. To change the wording, edit the script below."
+                  : `${scene.captions.length} timed caption segments. Editing caption text replaces these with a scene-wide caption.`}
               </small>
             )}
             <label>
@@ -716,6 +813,9 @@ function LoadedEditor({
                 onChange={(e) =>
                   updateScene({
                     script: e.target.value,
+                    ...(timeline.style === "explainer"
+                      ? { caption: e.target.value }
+                      : {}),
                     narrationId: null,
                     captions: [],
                   })
@@ -749,6 +849,7 @@ function LoadedEditor({
                   min={0}
                   step={0.1}
                   value={scene.mediaStart}
+                  disabled={timeline.style === "explainer"}
                   onChange={(e) =>
                     updateScene({
                       mediaStart: Math.max(0, Number(e.target.value)),
@@ -762,6 +863,7 @@ function LoadedEditor({
               <input
                 type="color"
                 value={scene.background}
+                disabled={timeline.style === "explainer"}
                 onChange={(e) => updateScene({ background: e.target.value })}
               />
             </label>
@@ -770,6 +872,7 @@ function LoadedEditor({
                 Transition
                 <select
                   value={scene.transition}
+                  disabled={timeline.style === "explainer"}
                   onChange={(e) =>
                     updateScene({
                       transition: e.target.value as Scene["transition"],
@@ -784,6 +887,7 @@ function LoadedEditor({
                 Media fit
                 <select
                   value={scene.fit}
+                  disabled={timeline.style === "explainer"}
                   onChange={(e) =>
                     updateScene({ fit: e.target.value as Scene["fit"] })
                   }
@@ -801,6 +905,7 @@ function LoadedEditor({
                 max={1}
                 step={0.01}
                 value={scene.sourceVolume}
+                disabled={timeline.style === "explainer"}
                 onChange={(e) =>
                   updateScene({ sourceVolume: Number(e.target.value) })
                 }
