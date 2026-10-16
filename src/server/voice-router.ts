@@ -27,6 +27,8 @@ const personas: Record<
     gemini: string;
     geminiEnv: string;
     geminiStyle: string;
+    orpheus: string;
+    orpheusEnv: string;
   }
 > = {
   "free-cute": {
@@ -35,8 +37,10 @@ const personas: Record<
     openai: "coral",
     gemini: "Leda",
     geminiEnv: "GEMINI_VOICE_CUTE",
+    orpheus: "hannah",
+    orpheusEnv: "GROQ_VOICE_CUTE",
     geminiStyle:
-      "bright, playful and youthful, like an excited friend sharing something cool, with natural breaths and real emotion",
+      "bright, playful and youthful, like an excited friend sharing something cool, with natural breaths and real emotion, at a quick, energetic pace with no long pauses",
     style:
       "Bright, playful and youthful, like an excited friend sharing something cool. Real emotion, natural breaths, varied pace, little laughs where they fit.",
   },
@@ -46,8 +50,10 @@ const personas: Record<
     openai: "sage",
     gemini: "Kore",
     geminiEnv: "GEMINI_VOICE_WARM",
+    orpheus: "autumn",
+    orpheusEnv: "GROQ_VOICE_WARM",
     geminiStyle:
-      "warm, calm and encouraging, like a favourite teacher, with natural breaths and gentle emphasis",
+      "warm, calm and encouraging, like a favourite teacher, with natural breaths and gentle emphasis, at a steady, unhurried but flowing pace with no long pauses",
     style:
       "Warm, calm and encouraging teacher. Natural breaths, gentle emphasis on key words, conversational pace.",
   },
@@ -57,15 +63,73 @@ const personas: Record<
     openai: "onyx",
     gemini: "Charon",
     geminiEnv: "GEMINI_VOICE_DEEP",
+    orpheus: "troy",
+    orpheusEnv: "GROQ_VOICE_DEEP",
     geminiStyle:
-      "deep, confident and measured, like a storyteller, with dramatic pauses and natural breaths",
+      "deep, confident and measured, like a storyteller, with short dramatic pauses and natural breaths, at a brisk pace",
     style:
       "Deep, confident storyteller. Measured pace, dramatic pauses, natural breaths, real conviction.",
   },
+  "free-bold": {
+    eleven: "AZnzlk1XvdvUeBnXmlld",
+    elevenEnv: "ELEVENLABS_VOICE_BOLD",
+    openai: "shimmer",
+    gemini: "Zephyr",
+    geminiEnv: "GEMINI_VOICE_BOLD",
+    orpheus: "diana",
+    orpheusEnv: "GROQ_VOICE_BOLD",
+    geminiStyle:
+      "bold, confident and a little sassy, like a creator who knows exactly what they are talking about, with natural breaths, at a quick pace with no long pauses",
+    style:
+      "Bold, confident and a little sassy. Quick, punchy delivery, natural breaths, real attitude.",
+  },
 };
 
+/** Generated voices are sped up (pitch preserved) so sentences don't drag. */
+const tempo = (provider: "gemini" | "groq" | "eleven") => {
+  const forced = Number(process.env.VOICE_TEMPO);
+  if (Number.isFinite(forced) && forced >= 0.8 && forced <= 1.6) return forced;
+  return provider === "gemini" ? 1.15 : provider === "groq" ? 1.12 : 1.1;
+};
+
+/**
+ * Speeds audio up without changing its pitch. Returns the factor actually
+ * applied: if encoding fails the original audio is kept (factor 1) so narration
+ * is never lost and timings are never scaled for audio that wasn't changed.
+ */
+async function speedUp(audio: Buffer, factor: number) {
+  if (factor === 1) return { audio, factor };
+  const id = crypto.randomUUID();
+  const input = join(tmpdir(), `clipvero-speed-${id}-in.mp3`);
+  const output = join(tmpdir(), `clipvero-speed-${id}-out.mp3`);
+  try {
+    await writeFile(input, audio);
+    await execute(binary("ffmpeg"), [
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      input,
+      "-filter:a",
+      `atempo=${factor}`,
+      "-b:a",
+      "128k",
+      output,
+    ]);
+    return { audio: await readFile(output), factor };
+  } catch {
+    return { audio, factor: 1 };
+  } finally {
+    await unlink(input).catch(() => {});
+    await unlink(output).catch(() => {});
+  }
+}
+
 const order = () =>
-  (process.env.CLIPVERO_VOICE_PROVIDERS || "elevenlabs,gemini,openai,local")
+  (
+    process.env.CLIPVERO_VOICE_PROVIDERS ||
+    "elevenlabs,gemini,groq,openai,local"
+  )
     .split(",")
     .map((id) => id.trim());
 
@@ -132,10 +196,22 @@ async function elevenLabs(text: string, persona: (typeof personas)[string]) {
       const data = alignmentSchema.parse(await response.json());
       const words = wordsFromAlignment(data.alignment);
       const ends = data.alignment.character_end_times_seconds;
+      // ElevenLabs v3 ignores its speed setting, so the speed-up is applied here
+      // and the word timings are scaled to match, keeping captions in sync.
+      const fast = await speedUp(
+        Buffer.from(data.audio_base64, "base64"),
+        tempo("eleven"),
+      );
+      const factor = fast.factor;
       return {
-        audio: Buffer.from(data.audio_base64, "base64"),
-        duration: ends[ends.length - 1] ?? words[words.length - 1]?.end ?? 0,
-        words,
+        audio: fast.audio,
+        duration:
+          (ends[ends.length - 1] ?? words[words.length - 1]?.end ?? 0) / factor,
+        words: words.map((w) => ({
+          text: w.text,
+          start: w.start / factor,
+          end: w.end / factor,
+        })),
         provider: `elevenlabs:${model}`,
       };
     }
@@ -221,7 +297,7 @@ async function groqAlign(audio: Buffer, text: string) {
   const [key] = groqKeys();
   if (!key)
     throw new Error(
-      "Gemini narration needs word timing: add a Groq key (GROQ_API_KEYS) or use another voice provider.",
+      "This narration needs word timing: add a Groq key (GROQ_API_KEYS) or use another voice provider.",
     );
   const form = new FormData();
   form.set("model", process.env.GROQ_WHISPER_MODEL || "whisper-large-v3-turbo");
@@ -329,6 +405,8 @@ async function gemini(text: string, persona: (typeof personas)[string]) {
       "1",
       "-i",
       raw,
+      "-filter:a",
+      `atempo=${tempo("gemini")}`,
       "-b:a",
       "128k",
       mp3,
@@ -339,6 +417,85 @@ async function gemini(text: string, persona: (typeof personas)[string]) {
   } finally {
     await unlink(raw).catch(() => {});
     await unlink(mp3).catch(() => {});
+  }
+}
+
+/** Splits text at sentence ends into pieces no longer than `max` characters. */
+export function sentenceChunks(text: string, max = 380) {
+  const parts = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const part of parts) {
+    if (current && (current + part).length > max) {
+      chunks.push(current.trim());
+      current = part;
+    } else current += part;
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+/** Orpheus on Groq: very natural, emotional speech; Whisper supplies word timing. */
+async function orpheus(text: string, persona: (typeof personas)[string]) {
+  const [key] = groqKeys();
+  if (!key)
+    throw new Error("Orpheus narration needs a Groq key (GROQ_API_KEYS).");
+  const model =
+    process.env.GROQ_TTS_MODEL?.trim() || "canopylabs/orpheus-v1-english";
+  const voiceName = process.env[persona.orpheusEnv]?.trim() || persona.orpheus;
+  const id = crypto.randomUUID();
+  const files: string[] = [];
+  const mp3 = join(tmpdir(), `clipvero-orpheus-${id}.mp3`);
+  try {
+    for (const [i, chunk] of sentenceChunks(text).entries()) {
+      let response: Response | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        response = await fetch("https://api.groq.com/openai/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            voice: voiceName,
+            input: chunk,
+            response_format: "wav",
+          }),
+          signal: AbortSignal.timeout(120000),
+        });
+        if (response.status !== 429) break;
+        await pause(Number(process.env.VOICE_RETRY_MS ?? 8000) * (attempt + 1));
+      }
+      if (!response?.ok)
+        throw new Error(`Groq speech returned HTTP ${response?.status}`);
+      const file = join(tmpdir(), `clipvero-orpheus-${id}-${i}.wav`);
+      await writeFile(file, Buffer.from(await response.arrayBuffer()));
+      files.push(file);
+    }
+    const speed = `atempo=${tempo("groq")}`;
+    await execute(binary("ffmpeg"), [
+      "-v",
+      "error",
+      "-y",
+      ...files.flatMap((file) => ["-i", file]),
+      ...(files.length > 1
+        ? [
+            "-filter_complex",
+            `${files.map((_, i) => `[${i}:a]`).join("")}concat=n=${files.length}:v=0:a=1,${speed}`,
+          ]
+        : ["-af", speed]),
+      "-b:a",
+      "128k",
+      mp3,
+    ]);
+    const audio = await readFile(mp3);
+    const aligned = await groqAlign(audio, text);
+    return { audio, ...aligned, provider: `groq:${voiceName}` };
+  } finally {
+    await Promise.all(
+      [...files, mp3].map((file) => unlink(file).catch(() => {})),
+    );
   }
 }
 
@@ -367,6 +524,11 @@ export async function speakScenes(
       ) {
         const spoken = [];
         for (const text of texts) spoken.push(await gemini(text, persona));
+        return spoken;
+      }
+      if (id === "groq" && persona && groqKeys().length) {
+        const spoken = [];
+        for (const text of texts) spoken.push(await orpheus(text, persona));
         return spoken;
       }
       if (id === "openai" && persona && process.env.OPENAI_API_KEY?.trim()) {

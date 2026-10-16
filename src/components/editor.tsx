@@ -37,6 +37,7 @@ import { foundationApi } from "@/lib/foundation-api";
 import {
   VideoComposition,
   type MediaMap,
+  builtinKind,
   builtinMedia,
 } from "@clipvero/video-engine/composition";
 import { api, useAction, useApp, useNotify } from "./app-provider";
@@ -131,6 +132,8 @@ function LoadedEditor({
   const [missingBuiltin, setMissingBuiltin] = useState<string[]>([]);
   useEffect(() => {
     for (const [id, src] of Object.entries(builtinMedia)) {
+      // Only images are probed; sound effects are small files that always ship.
+      if (builtinKind(src) !== "image") continue;
       const probe = new window.Image();
       probe.onerror = () => setMissingBuiltin((ids) => [...ids, id]);
       probe.src = src;
@@ -187,7 +190,7 @@ function LoadedEditor({
       Object.entries(builtinMedia)
         // The owner's mascot isn't in the repository; skip images that don't load.
         .filter(([id]) => !missingBuiltin.includes(id))
-        .map(([id, src]) => [id, { src, kind: "image" }]),
+        .map(([id, src]) => [id, { src, kind: builtinKind(src) }]),
     ),
   };
   const save = useCallback(async (): Promise<boolean> => {

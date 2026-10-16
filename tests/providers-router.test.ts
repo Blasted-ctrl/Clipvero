@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 process.env.CLAUDE_BIN = "none";
 process.env.CODEX_BIN = "none";
 const { availableWriters, writeText } =
   await import("../src/server/text-router");
-const { speakScenes, wordsFromAlignment } =
+const { sentenceChunks, speakScenes, wordsFromAlignment } =
   await import("../src/server/voice-router");
 
 const realFetch = globalThis.fetch;
@@ -374,5 +376,206 @@ test("a rate-limited Gemini voice falls through to the next provider instead of 
       const [spoken] = await speakScenes(["Hi."], "free-warm");
       assert.equal(geminiCalls, 3, "three attempts with backoff");
       assert.equal(spoken.provider, "openai");
+    },
+  ));
+
+function wav(seconds: number, rate = 24000) {
+  const samples = Math.round(seconds * rate);
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + samples * 2, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(samples * 2, 40);
+  return Buffer.concat([header, Buffer.alloc(samples * 2)]);
+}
+async function duration(audio: Buffer) {
+  const { writeFileSync, rmSync } = await import("node:fs");
+  const { probe } = await import("../src/server/media");
+  const path = join(tmpdir(), `clipvero-test-${crypto.randomUUID()}.mp3`);
+  writeFileSync(path, audio);
+  try {
+    return Number((await probe(path)).format.duration);
+  } finally {
+    rmSync(path, { force: true });
+  }
+}
+
+test("sentences are split into pieces that fit Orpheus's input size", () => {
+  const sentence =
+    "Binary search halves the list at every step so it stays fast. ";
+  const text = sentence.repeat(12).trim();
+  const chunks = sentenceChunks(text, 380);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((c) => c.length <= 380));
+  assert.equal(
+    chunks.join(" ").replace(/\s+/g, " "),
+    text.replace(/\s+/g, " "),
+  );
+  assert.deepEqual(sentenceChunks("One short line."), ["One short line."]);
+});
+
+test("generated voices are sped up so sentences don't drag, and VOICE_TEMPO can override it", () =>
+  withEnv(
+    {
+      CLIPVERO_VOICE_PROVIDERS: "gemini",
+      GEMINI_API_KEY: "g",
+      GROQ_API_KEYS: "gsk",
+      ELEVENLABS_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      VOICE_TEMPO: undefined,
+    },
+    async () => {
+      globalThis.fetch = (async (url: string) =>
+        url.includes("generativelanguage")
+          ? Response.json({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        inlineData: {
+                          data: Buffer.alloc(24000 * 2 * 2).toString("base64"),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })
+          : Response.json({
+              duration: 1,
+              words: [{ word: "Hi", start: 0, end: 0.5 }],
+            })) as typeof fetch;
+      const normal = await duration(
+        (await speakScenes(["Hi."], "free-cute"))[0].audio,
+      );
+      assert.ok(
+        normal > 1.6 && normal < 1.85,
+        `2s of audio at 1.15x is about 1.74s, got ${normal}`,
+      );
+      process.env.VOICE_TEMPO = "1";
+      const same = await duration(
+        (await speakScenes(["Hi."], "free-cute"))[0].audio,
+      );
+      assert.ok(same > 1.95, `unchanged speed stays near 2s, got ${same}`);
+    },
+  ));
+
+test("Orpheus on Groq voices each sentence group, joins them, speeds them up and gets word timings", () =>
+  withEnv(
+    {
+      CLIPVERO_VOICE_PROVIDERS: "groq",
+      GROQ_API_KEYS: "gsk-test",
+      GROQ_VOICE_BOLD: undefined,
+      VOICE_TEMPO: undefined,
+      ELEVENLABS_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+    },
+    async () => {
+      const speech: { voice: string; input: string }[] = [];
+      globalThis.fetch = (async (url: string, init: RequestInit) => {
+        if (url.endsWith("/audio/speech")) {
+          speech.push(JSON.parse(String(init.body)));
+          return new Response(new Uint8Array(wav(1)));
+        }
+        return Response.json({
+          duration: 1.7,
+          words: [
+            { word: "Long", start: 0.1, end: 0.5 },
+            { word: "text", start: 0.6, end: 1 },
+          ],
+        });
+      }) as typeof fetch;
+      const sentence =
+        "This sentence is padded out so that two of them cannot fit in one request. "
+          .repeat(3)
+          .trim();
+      const [spoken] = await speakScenes(
+        [`${sentence} ${sentence}`.slice(0, 700)],
+        "free-bold",
+      );
+      assert.equal(spoken.provider, "groq:diana");
+      assert.ok(speech.length >= 2, "long text goes out in several requests");
+      assert.ok(
+        speech.every((s) => s.voice === "diana" && s.input.length <= 380),
+      );
+      const joined = await duration(spoken.audio);
+      assert.ok(
+        joined > 1.6 && joined < 1.9,
+        `two 1s pieces at 1.12x is about 1.8s, got ${joined}`,
+      );
+      assert.deepEqual(
+        spoken.words.map((w) => w.text),
+        ["Long", "text"],
+      );
+    },
+  ));
+
+test("ElevenLabs audio is sped up and its word timings scale with it; bad audio is kept as is", () =>
+  withEnv(
+    {
+      CLIPVERO_VOICE_PROVIDERS: "elevenlabs",
+      ELEVENLABS_API_KEY: "e",
+      VOICE_TEMPO: undefined,
+      ELEVENLABS_MODEL: undefined,
+    },
+    async () => {
+      const { writeFileSync, readFileSync, rmSync } = await import("node:fs");
+      const { binary, execute } = await import("../src/server/media");
+      const source = join(tmpdir(), `clipvero-test-${crypto.randomUUID()}.wav`);
+      const encoded = source.replace(/\.wav$/, ".mp3");
+      writeFileSync(source, wav(2));
+      await execute(binary("ffmpeg"), [
+        "-v",
+        "error",
+        "-y",
+        "-i",
+        source,
+        encoded,
+      ]);
+      const real = readFileSync(encoded);
+      rmSync(source, { force: true });
+      rmSync(encoded, { force: true });
+      const reply = (audio: Buffer) => {
+        const chars = [..."Hello world."];
+        return Response.json({
+          audio_base64: audio.toString("base64"),
+          alignment: {
+            characters: chars,
+            character_start_times_seconds: chars.map((_, i) => i * 0.1),
+            character_end_times_seconds: chars.map((_, i) => i * 0.1 + 0.1),
+          },
+        });
+      };
+      globalThis.fetch = (async () => reply(real)) as typeof fetch;
+      const [fast] = await speakScenes(["Hello world."], "free-cute");
+      assert.ok(
+        (await duration(fast.audio)) < 1.95,
+        "2s of speech at 1.1x is about 1.8s",
+      );
+      assert.ok(
+        Math.abs(fast.duration - 1.2 / 1.1) < 0.01,
+        "the reported length scales with the audio",
+      );
+      assert.ok(
+        Math.abs(fast.words[1].start - 0.6 / 1.1) < 0.01,
+        "word timings scale too",
+      );
+      // Audio that cannot be re-encoded is kept untouched, with unscaled timings.
+      globalThis.fetch = (async () =>
+        reply(Buffer.from("not audio"))) as typeof fetch;
+      const [kept] = await speakScenes(["Hello world."], "free-cute");
+      assert.ok(Math.abs(kept.words[1].start - 0.6) < 0.01);
+      assert.equal(kept.provider, "elevenlabs:eleven_v3");
     },
   ));

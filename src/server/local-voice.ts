@@ -10,8 +10,10 @@ import { z } from "zod";
 const presets: Record<string, { voice: string; pitch: number; speed: number }> =
   {
     "free-cute": { voice: "af_sky", pitch: 1.14, speed: 1.3 },
-    "free-warm": { voice: "af_heart", pitch: 1, speed: 1.2 },
+    // Nicole: soft, close and calm; a touch faster so sentences don't drag.
+    "free-warm": { voice: "af_nicole", pitch: 1, speed: 1.1 },
     "free-deep": { voice: "am_onyx", pitch: 0.94, speed: 1.1 },
+    "free-bold": { voice: "af_bella", pitch: 1, speed: 1.12 },
   };
 
 export type SpokenWord = { text: string; start: number; end: number };

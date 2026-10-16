@@ -20,7 +20,9 @@ export const contentRunSchema = z
     count: z.number().int().min(1).max(200),
     hours: z.number().int().min(1).max(144),
     style: z.enum(["explainer", "conversation"]).default("explainer"),
-    voice: z.enum(["free-cute", "free-warm", "free-deep"]).default("free-cute"),
+    voice: z
+      .enum(["free-cute", "free-warm", "free-deep", "free-bold"])
+      .default("free-cute"),
     backgroundAssetId: z.string().uuid().optional(),
     duration: z.number().int().min(30).max(120).default(60),
     niche: z

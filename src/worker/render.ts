@@ -21,6 +21,7 @@ import {
 } from "../lib/model";
 import { highlightTimelineCode } from "@clipvero/video-engine/code-tokens";
 import {
+  builtinKind,
   builtinMedia,
   type MediaMap,
 } from "@clipvero/video-engine/composition";
@@ -71,7 +72,10 @@ async function assetServer() {
       const id = url.pathname.slice(1);
       const builtin = builtinMedia[id as keyof typeof builtinMedia];
       const asset = builtin
-        ? { filename: resolve(`public${builtin}`), mime: "image/png" }
+        ? {
+            filename: resolve(`public${builtin}`),
+            mime: builtin.endsWith(".mp3") ? "audio/mpeg" : "image/png",
+          }
         : one<{ filename: string; mime: string }>(
             "SELECT filename,mime FROM assets WHERE id=?",
             id,
@@ -158,7 +162,7 @@ export async function renderProject(
   for (const [builtin, path] of Object.entries(builtinMedia))
     if (existsSync(resolve(`public${path}`)))
       media[builtin] = {
-        kind: "image",
+        kind: builtinKind(path),
         src: `${base}/${builtin}?token=${token}`,
       };
   const code = await highlightTimelineCode(timeline);

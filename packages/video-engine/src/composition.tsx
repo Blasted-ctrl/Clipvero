@@ -10,6 +10,8 @@ import {
 } from "remotion";
 import type { Timeline, Scene } from "./model";
 import { ConversationComposition } from "./conversation";
+import { sfxMedia } from "./sfx";
+import { SfxLayer } from "./sfx-layer";
 import { BeatVisual } from "./beats";
 import { CodeLines, CodeTokensContext } from "./code-view";
 import type { CodeTokens } from "./code-key";
@@ -32,10 +34,14 @@ export const BUILTIN_MASCOT = "builtin-mascot";
 /** Media key for the channel logo shown in the watermark. */
 export const BUILTIN_LOGO = "builtin-logo";
 /** Built-in media files, relative to the web app's public folder. */
-export const builtinMedia = {
+export const builtinMedia: Record<string, string> = {
   [BUILTIN_MASCOT]: "/mascots/default.png",
   [BUILTIN_LOGO]: "/brand/logo.png",
+  ...sfxMedia,
 };
+/** Built-in files are images unless they are sound effects. */
+export const builtinKind = (path: string) =>
+  path.endsWith(".mp3") ? "audio" : "image";
 export type CompositionProps = {
   timeline: Timeline;
   media: MediaMap;
@@ -542,6 +548,7 @@ function ExplainerComposition({ timeline, media }: CompositionProps) {
           compact={Boolean(current.cost)}
         />
       )}
+      <SfxLayer timeline={timeline} media={media} />
       {timeline.musicAssetId && media[timeline.musicAssetId] && (
         <Audio
           src={media[timeline.musicAssetId].src}

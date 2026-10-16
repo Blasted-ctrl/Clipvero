@@ -126,6 +126,7 @@ export function AutopilotPanel() {
               <option value="free-cute">Free voice · cute</option>
               <option value="free-warm">Free voice · warm</option>
               <option value="free-deep">Free voice · deep</option>
+              <option value="free-bold">Free voice · bold</option>
             </select>
           </label>
         </div>

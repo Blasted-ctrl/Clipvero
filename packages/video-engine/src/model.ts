@@ -817,6 +817,8 @@ export const timelineSchema = z
       .default([]),
     topic: z.string().max(32).default(""),
     brand: z.string().max(24).default(""),
+    /** Short sound effects on scene and diagram changes (explainer and conversation looks). */
+    sfx: z.boolean().default(true),
     visual: z.enum(["grid", "complexity"]).default("grid"),
     mascot: z.enum(["none", "default", "asset"]).default("none"),
     mascotAssetId: id.nullable().default(null),

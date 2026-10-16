@@ -10,6 +10,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { BeatVisual } from "./beats";
+import { SfxLayer } from "./sfx-layer";
 import { BrandMark, WordCaptions, timelineWords, type Word } from "./explainer";
 import type { Timeline } from "./model";
 
@@ -136,6 +137,7 @@ export function ConversationComposition({
           logo={logo}
         />
       )}
+      <SfxLayer timeline={timeline} media={media} />
       {timeline.musicAssetId && media[timeline.musicAssetId] && (
         <Audio
           src={media[timeline.musicAssetId].src}

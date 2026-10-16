@@ -83,6 +83,7 @@ export const voices = [
   "free-cute",
   "free-warm",
   "free-deep",
+  "free-bold",
 ] as const;
 export const isLocalVoice = (voice: string) => voice.startsWith("free-");
 const id = z.string().uuid();
